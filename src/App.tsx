@@ -133,6 +133,13 @@ export function App() {
             saveLocalEvents(updated);
             return updated;
           });
+        } else if (payload.eventType === 'UPDATE') {
+          const updatedEvent = payload.new as BabyEvent;
+          setEvents(prev => {
+            const updated = prev.map(e => e.id === updatedEvent.id ? updatedEvent : e);
+            saveLocalEvents(updated);
+            return updated;
+          });
         } else if (payload.eventType === 'DELETE') {
           const deletedId = payload.old?.id;
           if (deletedId) {

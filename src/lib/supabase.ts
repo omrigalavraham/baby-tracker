@@ -166,7 +166,7 @@ export async function addEventToSupabase(event: BabyEvent): Promise<boolean> {
   try {
     const { error } = await client
       .from('events')
-      .insert({
+      .upsert({
         id: event.id,
         baby_id: event.baby_id,
         type: event.type,
