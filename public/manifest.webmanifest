@@ -1,0 +1,18 @@
+{
+  "name": "בייבי יומן - מעקב תינוקות",
+  "short_name": "בייבי יומן",
+  "description": "יומן מעקב האכלות, חיתולים, שינה והתפתחות לתינוקות",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fff1f2",
+  "theme_color": "#f43f5e",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
