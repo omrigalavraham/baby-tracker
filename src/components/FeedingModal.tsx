@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Play, Pause, Check, RotateCcw, Milk, Clock, Baby } from 'lucide-react';
+import { X, Play, Pause, Check, RotateCcw, Milk } from 'lucide-react';
 import { FeedingType, BreastSide, BottleContent, BabyEvent } from '../types';
+import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 
 interface FeedingModalProps {
   isOpen: boolean;
@@ -17,6 +18,7 @@ export const FeedingModal: React.FC<FeedingModalProps> = ({
 
   // Live Timer State
   const [timerRunning, setTimerRunning] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [activeSide, setActiveSide] = useState<'left' | 'right'>('right');
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [secondsRight, setSecondsRight] = useState(0);
@@ -281,16 +283,9 @@ export const FeedingModal: React.FC<FeedingModalProps> = ({
 
                 {(secondsLeft + secondsRight > 0) && (
                   <button
-                    onClick={() => {
-                      if (confirm('לאפס את הטיימר?')) {
-                        setTimerRunning(false);
-                        setSecondsLeft(0);
-                        setSecondsRight(0);
-                        setLiveStartTime(null);
-                      }
-                    }}
+                    onClick={() => setShowResetConfirm(true)}
                     className="p-3 rounded-2xl border border-slate-200 text-slate-500 hover:bg-slate-100 transition-colors"
-                    title="איפוס"
+                    title="איפוס טיימר"
                   >
                     <RotateCcw className="w-5 h-5" />
                   </button>
@@ -521,6 +516,23 @@ export const FeedingModal: React.FC<FeedingModalProps> = ({
         </div>
 
       </div>
+
+      {/* Sleek Timer Reset Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={showResetConfirm}
+        title="לאפס את טיימר ההנקה?"
+        description="זמן ההאכלה הנוכחי יימחק ולא יישמר ביומן."
+        confirmText="כן, אפס טיימר"
+        cancelText="המשך מדידה"
+        onConfirm={() => {
+          setTimerRunning(false);
+          setSecondsLeft(0);
+          setSecondsRight(0);
+          setLiveStartTime(null);
+          setShowResetConfirm(false);
+        }}
+        onClose={() => setShowResetConfirm(false)}
+      />
     </div>
   );
 };

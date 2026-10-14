@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { BabyEvent } from '../types';
 import { formatTime, formatDate } from '../lib/babyUtils';
 import { Milk, Droplets, Moon, Scale, Trash2 } from 'lucide-react';
+import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 
 interface TimelineListProps {
   events: BabyEvent[];
@@ -12,6 +13,8 @@ export const TimelineList: React.FC<TimelineListProps> = ({
   events,
   onDeleteEvent
 }) => {
+  const [eventToDelete, setEventToDelete] = useState<BabyEvent | null>(null);
+
   if (events.length === 0) {
     return (
       <div className="max-w-md mx-auto px-4 py-8 text-center text-slate-400">
@@ -56,7 +59,6 @@ export const TimelineList: React.FC<TimelineListProps> = ({
             <div className="space-y-2">
               {dayEvents.map(event => {
                 let icon = <Milk className="w-4 h-4" />;
-                let bgColor = 'bg-rose-50 border-rose-100 text-rose-700';
                 let iconBg = 'bg-rose-500 text-white';
                 let title = 'פעולה';
                 let subtitle = '';
@@ -74,7 +76,6 @@ export const TimelineList: React.FC<TimelineListProps> = ({
                   }
                 } else if (event.type === 'diaper') {
                   icon = <Droplets className="w-4 h-4" />;
-                  bgColor = 'bg-sky-50 border-sky-100 text-sky-800';
                   iconBg = 'bg-sky-500 text-white';
                   const dType = event.details?.diaperType;
                   title = 'החלפת טיטול';
@@ -82,7 +83,6 @@ export const TimelineList: React.FC<TimelineListProps> = ({
                   if (event.details?.poopColor) subtitle += ` • צבע: ${event.details.poopColor}`;
                 } else if (event.type === 'sleep') {
                   icon = <Moon className="w-4 h-4" />;
-                  bgColor = 'bg-indigo-50 border-indigo-100 text-indigo-800';
                   iconBg = 'bg-indigo-600 text-white';
                   title = 'שינה';
                   subtitle = event.details?.isOngoing 
@@ -90,7 +90,6 @@ export const TimelineList: React.FC<TimelineListProps> = ({
                     : `משך שינה: ${event.details?.durationMinutes || 0} דקות`;
                 } else if (event.type === 'weight') {
                   icon = <Scale className="w-4 h-4" />;
-                  bgColor = 'bg-amber-50 border-amber-100 text-amber-800';
                   iconBg = 'bg-amber-500 text-white';
                   title = 'שקילה';
                   subtitle = `${event.details?.weightKg} ק"ג`;
@@ -124,13 +123,10 @@ export const TimelineList: React.FC<TimelineListProps> = ({
                       </div>
                     </div>
 
+                    {/* Delete action opens sleek custom modal */}
                     <button
-                      onClick={() => {
-                        if (confirm('למחוק רישום זה?')) {
-                          onDeleteEvent(event.id);
-                        }
-                      }}
-                      className="text-slate-300 hover:text-rose-500 p-2 rounded-lg transition-colors"
+                      onClick={() => setEventToDelete(event)}
+                      className="text-slate-300 hover:text-rose-500 p-2 rounded-xl hover:bg-rose-50 transition-colors"
                       title="מחק רישום"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -142,6 +138,22 @@ export const TimelineList: React.FC<TimelineListProps> = ({
           </div>
         );
       })}
+
+      {/* Sleek in-app custom delete confirmation modal */}
+      <ConfirmDeleteModal
+        isOpen={!!eventToDelete}
+        title="למחוק פעולה זו מהיומן?"
+        description="הפעולה תימחק לצמיתות מהיומן ומכל המכשירים המחוברים."
+        confirmText="כן, מחק עכשיו"
+        cancelText="ביטול"
+        onConfirm={() => {
+          if (eventToDelete) {
+            onDeleteEvent(eventToDelete.id);
+            setEventToDelete(null);
+          }
+        }}
+        onClose={() => setEventToDelete(null)}
+      />
     </div>
   );
 };
