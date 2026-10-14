@@ -32,10 +32,12 @@ import { WeightModal } from './components/WeightModal';
 import { BabyProfileModal } from './components/BabyProfileModal';
 import { SyncSettingsModal } from './components/SyncSettingsModal';
 import { ExportDataModal } from './components/ExportDataModal';
+import { SplashScreen } from './components/SplashScreen';
 
-import { Activity, Sparkles, BookOpen } from 'lucide-react';
+import { Activity, Sparkles } from 'lucide-react';
 
 export function App() {
+  const [showSplash, setShowSplash] = useState(true);
   const [profile, setProfile] = useState<BabyProfile>(loadLocalProfile);
   const [events, setEvents] = useState<BabyEvent[]>(loadLocalEvents);
   const [completedMilestones, setCompletedMilestones] = useState<string[]>(loadCompletedMilestones);
@@ -305,9 +307,18 @@ export function App() {
         onOpenProfile={() => setProfileModalOpen(true)}
         onOpenSync={() => setSyncModalOpen(true)}
         onOpenExport={() => setExportModalOpen(true)}
+        onReplaySplash={() => setShowSplash(true)}
         installPrompt={deferredPrompt}
         onInstallApp={handleInstallApp}
       />
+
+      {/* Animated Opening Splash Screen */}
+      {showSplash && (
+        <SplashScreen
+          babyName={profile.name}
+          onFinish={() => setShowSplash(false)}
+        />
+      )}
 
       {/* Main View: Tracker or Milestones */}
       {mainTab === 'tracker' ? (

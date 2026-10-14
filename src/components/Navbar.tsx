@@ -9,6 +9,7 @@ interface NavbarProps {
   onOpenProfile: () => void;
   onOpenSync: () => void;
   onOpenExport: () => void;
+  onReplaySplash?: () => void;
   installPrompt: any;
   onInstallApp: () => void;
 }
@@ -19,6 +20,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenProfile,
   onOpenSync,
   onOpenExport,
+  onReplaySplash,
   installPrompt,
   onInstallApp
 }) => {
@@ -56,6 +58,17 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Action Buttons */}
         <div className="flex items-center gap-1.5">
+          {/* Replay splash animation button */}
+          {onReplaySplash && (
+            <button
+              onClick={onReplaySplash}
+              title="צפה במסך הפתיחה"
+              className="p-2 rounded-xl bg-pink-50 border border-pink-200/80 text-pink-600 hover:bg-pink-100 transition-all active:scale-95"
+            >
+              <Sparkles className="w-4 h-4" />
+            </button>
+          )}
+
           {/* Install PWA Button if available */}
           {installPrompt && (
             <button
