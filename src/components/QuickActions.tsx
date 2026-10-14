@@ -1,10 +1,10 @@
-import React from 'react';
-import { Milk, Droplet, Sparkles, Moon, Scale } from 'lucide-react';
+import React, { useState } from 'react';
+import { Milk, Droplet, Sparkles, Moon, Scale, X, Check } from 'lucide-react';
 
 interface QuickActionsProps {
   onOpenFeeding: () => void;
   onQuickDiaperPee: () => void;
-  onQuickDiaperPoop: () => void;
+  onQuickDiaperPoopWithColor: (color?: string) => void;
   onOpenDiaperFull: () => void;
   onOpenSleep: () => void;
   onOpenWeight: () => void;
@@ -15,20 +15,36 @@ interface QuickActionsProps {
 export const QuickActions: React.FC<QuickActionsProps> = ({
   onOpenFeeding,
   onQuickDiaperPee,
-  onQuickDiaperPoop,
+  onQuickDiaperPoopWithColor,
   onOpenDiaperFull,
   onOpenSleep,
   onOpenWeight,
   isSleeping,
   onToggleSleepQuick
 }) => {
+  const [showPoopColorPicker, setShowPoopColorPicker] = useState(false);
+
+  const POOP_COLORS = [
+    { label: 'צהוב חרדלי', bg: 'bg-amber-400', border: 'border-amber-500', text: 'text-amber-950', dot: '🟡' },
+    { label: 'צהוב בהיר', bg: 'bg-yellow-200', border: 'border-yellow-400', text: 'text-yellow-900', dot: '🟡' },
+    { label: 'ירקרק', bg: 'bg-emerald-400', border: 'border-emerald-600', text: 'text-emerald-950', dot: '🟢' },
+    { label: 'חום', bg: 'bg-amber-800', border: 'border-amber-900', text: 'text-amber-50', dot: '🟤' },
+    { label: 'כתום', bg: 'bg-orange-400', border: 'border-orange-500', text: 'text-orange-950', dot: '🟠' },
+    { label: 'כהה / מקוניום', bg: 'bg-slate-700', border: 'border-slate-900', text: 'text-white', dot: '🖤' }
+  ];
+
+  const handleSelectPoopColor = (color?: string) => {
+    onQuickDiaperPoopWithColor(color);
+    setShowPoopColorPicker(false);
+  };
+
   return (
-    <div className="max-w-md mx-auto px-4 py-2">
-      <div className="bg-white/80 backdrop-blur-xs p-3.5 rounded-2xl border border-rose-100 shadow-xs">
+    <div className="max-w-md mx-auto px-4 py-2 relative">
+      <div className="bg-white/90 backdrop-blur-xs p-3.5 rounded-2xl border border-rose-100 shadow-xs">
         <div className="flex items-center justify-between mb-2.5 px-1">
           <span className="text-xs font-bold text-slate-700 flex items-center gap-1">
             <Sparkles className="w-3.5 h-3.5 text-rose-500" />
-            רישום מהיר בלחיצה אחת:
+            פעולות מהירות בלחיצה אחת:
           </span>
         </div>
 
@@ -46,7 +62,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
             <span className="text-[10px] text-rose-500 font-medium">הנקה/בקבוק</span>
           </button>
 
-          {/* פיפי מהיר */}
+          {/* פיפי מהיר (1-Tap מיידי) */}
           <button
             onClick={onQuickDiaperPee}
             className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-gradient-to-b from-sky-50 to-sky-100/60 border border-sky-200/80 text-sky-700 active:scale-95 transition-all shadow-xs"
@@ -58,16 +74,16 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
             <span className="text-[10px] text-sky-500 font-medium">לחיצה ושמור</span>
           </button>
 
-          {/* קקי מהיר */}
+          {/* קקי מהיר (פותח בורר צבע מהיר בלחיצה אחת) */}
           <button
-            onClick={onQuickDiaperPoop}
+            onClick={() => setShowPoopColorPicker(true)}
             className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-gradient-to-b from-amber-50 to-amber-100/60 border border-amber-200/80 text-amber-700 active:scale-95 transition-all shadow-xs"
           >
             <div className="w-9 h-9 rounded-full bg-amber-500 text-white flex items-center justify-center mb-1 shadow-xs shadow-amber-300">
               <span className="text-lg">💩</span>
             </div>
             <span className="text-xs font-bold">קקי 💩</span>
-            <span className="text-[10px] text-amber-600 font-medium">לחיצה ושמור</span>
+            <span className="text-[10px] text-amber-600 font-medium">בחר צבע ושמור</span>
           </button>
 
           {/* שינה טוגל מהיר */}
@@ -75,7 +91,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
             onClick={onToggleSleepQuick}
             className={`flex flex-col items-center justify-center p-2.5 rounded-xl border active:scale-95 transition-all shadow-xs ${
               isSleeping
-                ? 'bg-gradient-to-b from-indigo-500 to-indigo-600 border-indigo-700 text-white shadow-indigo-300'
+                ? 'bg-gradient-to-b from-indigo-500 to-indigo-600 border-indigo-700 text-white shadow-indigo-300 animate-pulse'
                 : 'bg-gradient-to-b from-indigo-50 to-indigo-100/60 border-indigo-200/80 text-indigo-700'
             }`}
           >
@@ -87,8 +103,8 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
             <span className="text-xs font-bold">
               {isSleeping ? 'התעוררה!' : 'נרדמה'}
             </span>
-            <span className={`text-[10px] font-medium ${isSleeping ? 'text-indigo-100' : 'text-indigo-500'}`}>
-              {isSleeping ? 'עצור טיימר' : 'התחל שינה'}
+            <span className={`text-[10px] font-medium ${isSleeping ? 'text-indigo-100 font-bold' : 'text-indigo-500'}`}>
+              {isSleeping ? 'סיום שינה' : 'התחל שינה'}
             </span>
           </button>
 
@@ -100,7 +116,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
             onClick={onOpenDiaperFull}
             className="hover:text-rose-600 transition-colors flex items-center gap-1"
           >
-            <span>📝 חיתול מפורט (צבע/מרקם)</span>
+            <span>📝 חיתול מפורט (מרקם/משחה)</span>
           </button>
           <button
             onClick={onOpenSleep}
@@ -118,6 +134,63 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
         </div>
 
       </div>
+
+      {/* QUICK POPUP: Poop Color Picker (2-tap instant save) */}
+      {showPoopColorPicker && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-white w-full max-w-sm rounded-3xl p-5 shadow-2xl border border-amber-200 text-right space-y-3 animate-in slide-in-from-bottom-4 duration-200">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">💩</span>
+                <h3 className="font-bold text-slate-800 text-base">באיזה צבע הקקי?</h3>
+              </div>
+              <button
+                onClick={() => setShowPoopColorPicker(false)}
+                className="p-1 rounded-full text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500">
+              לחצו על הצבע המתאים לשמירה מיידית ביומן:
+            </p>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              {POOP_COLORS.map(c => (
+                <button
+                  key={c.label}
+                  onClick={() => handleSelectPoopColor(c.label)}
+                  className="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 hover:border-amber-400 bg-slate-50 hover:bg-amber-50/70 text-right active:scale-95 transition-all text-xs font-bold text-slate-800 shadow-2xs"
+                >
+                  <span className="text-base">{c.dot}</span>
+                  <span>{c.label}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+              <button
+                onClick={() => handleSelectPoopColor(undefined)}
+                className="text-slate-500 hover:text-slate-800 font-medium py-1 px-2"
+              >
+                ⚡ שמור בלי לציין צבע
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowPoopColorPicker(false);
+                  onOpenDiaperFull();
+                }}
+                className="text-amber-700 font-bold hover:underline py-1 px-2"
+              >
+                פרטים נוספים (מרקם/הערות) ➔
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

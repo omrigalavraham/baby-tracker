@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { BabyEvent, BabyProfile } from '../types';
-import { formatTimeAgo } from '../lib/babyUtils';
+import { formatTimeAgo, formatLiveDuration, formatTime } from '../lib/babyUtils';
 import { Milk, Droplets, Moon, Scale } from 'lucide-react';
 
 interface StatusCardsProps {
@@ -20,13 +20,6 @@ export const StatusCards: React.FC<StatusCardsProps> = ({
   onOpenSleep,
   onOpenWeight
 }) => {
-  // Re-calculate relative times every minute
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const timer = setInterval(() => setTick(t => t + 1), 60000);
-    return () => clearInterval(timer);
-  }, []);
-
   // Find last events
   const lastFeeding = events.find(e => e.type === 'feeding');
   const lastDiaper = events.find(e => e.type === 'diaper');
@@ -34,6 +27,14 @@ export const StatusCards: React.FC<StatusCardsProps> = ({
   const lastWeight = events.find(e => e.type === 'weight');
 
   const isCurrentlySleeping = lastSleep?.details?.isOngoing;
+
+  // Re-calculate live duration (every second if sleeping, otherwise every minute)
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const interval = isCurrentlySleeping ? 1000 : 30000;
+    const timer = setInterval(() => setTick(t => t + 1), interval);
+    return () => clearInterval(timer);
+  }, [isCurrentlySleeping]);
 
   // Feeding summary text
   let feedingSummary = 'טרם נרשמה האכלה';
@@ -51,16 +52,26 @@ export const StatusCards: React.FC<StatusCardsProps> = ({
   if (lastDiaper) {
     const dType = lastDiaper.details?.diaperType;
     diaperSummary = dType === 'pee' ? 'פיפי 💧' : dType === 'poop' ? 'קקי 💩' : 'פיפי וקקי 💧💩';
+    if (lastDiaper.details?.poopColor) {
+      diaperSummary += ` (${lastDiaper.details.poopColor})`;
+    }
   }
 
-  // Sleep summary text
-  let sleepSummary = 'טרם נרשמה שינה';
+  // Sleep calculations
+  let sleepDurationText = '';
+  let sleepSubtitle = '';
   if (lastSleep) {
     if (isCurrentlySleeping) {
-      sleepSummary = 'ישנה כרגע... 💤';
+      const live = formatLiveDuration(lastSleep.started_at);
+      sleepDurationText = `ישנה ${live.formattedText}`;
+      sleepSubtitle = `נרדמה ב-${formatTime(lastSleep.started_at)}`;
     } else {
-      sleepSummary = `ישנה ${lastSleep.details?.durationMinutes || 0} דק'`;
+      sleepDurationText = formatTimeAgo(lastSleep.ended_at || lastSleep.started_at);
+      sleepSubtitle = `ישנה ${lastSleep.details?.durationMinutes || 0} דק'`;
     }
+  } else {
+    sleepDurationText = 'טרם נרשמה שינה';
+    sleepSubtitle = 'הקש להפעלת טיימר';
   }
 
   // Weight summary
@@ -75,7 +86,7 @@ export const StatusCards: React.FC<StatusCardsProps> = ({
         className="bg-white p-3.5 rounded-2xl border border-rose-100 shadow-xs hover:border-rose-300 transition-all cursor-pointer active:scale-[0.98]"
       >
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-semibold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-lg">
+          <span className="text-[11px] font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-lg">
             האכלה אחרונה
           </span>
           <div className="w-7 h-7 rounded-full bg-rose-100 flex items-center justify-center text-rose-600">
@@ -96,7 +107,7 @@ export const StatusCards: React.FC<StatusCardsProps> = ({
         className="bg-white p-3.5 rounded-2xl border border-sky-100 shadow-xs hover:border-sky-300 transition-all cursor-pointer active:scale-[0.98]"
       >
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-semibold text-sky-500 bg-sky-50 px-2 py-0.5 rounded-lg">
+          <span className="text-[11px] font-bold text-sky-500 bg-sky-50 px-2 py-0.5 rounded-lg">
             חיתול אחרון
           </span>
           <div className="w-7 h-7 rounded-full bg-sky-100 flex items-center justify-center text-sky-600">
@@ -111,30 +122,43 @@ export const StatusCards: React.FC<StatusCardsProps> = ({
         </p>
       </div>
 
-      {/* Sleep Card */}
+      {/* Sleep Card - Live Ticking Timer when sleeping! */}
       <div 
         onClick={onOpenSleep}
         className={`p-3.5 rounded-2xl border shadow-xs transition-all cursor-pointer active:scale-[0.98] ${
           isCurrentlySleeping 
-            ? 'bg-indigo-50/70 border-indigo-200 hover:border-indigo-300' 
+            ? 'bg-gradient-to-br from-indigo-50/90 to-purple-50/90 border-indigo-300 ring-2 ring-indigo-200/50' 
             : 'bg-white border-indigo-100 hover:border-indigo-300'
         }`}
       >
         <div className="flex items-center justify-between mb-2">
-          <span className={`text-xs font-semibold px-2 py-0.5 rounded-lg ${
-            isCurrentlySleeping ? 'bg-indigo-600 text-white animate-pulse' : 'text-indigo-500 bg-indigo-50'
+          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-lg flex items-center gap-1 ${
+            isCurrentlySleeping 
+              ? 'bg-indigo-600 text-white shadow-xs' 
+              : 'text-indigo-500 bg-indigo-50'
           }`}>
-            {isCurrentlySleeping ? 'ישנה עכשיו' : 'שינה אחרונה'}
+            {isCurrentlySleeping ? (
+              <>
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                <span>ישנה כעת...</span>
+              </>
+            ) : (
+              'שינה אחרונה'
+            )}
           </span>
-          <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600">
+          <div className={`w-7 h-7 rounded-full flex items-center justify-center ${
+            isCurrentlySleeping ? 'bg-indigo-600 text-white' : 'bg-indigo-100 text-indigo-600'
+          }`}>
             <Moon className="w-4 h-4" />
           </div>
         </div>
-        <div className="text-base font-bold text-slate-800">
-          {isCurrentlySleeping ? 'בתנומה 😴' : formatTimeAgo(lastSleep?.ended_at || lastSleep?.started_at)}
+        
+        {/* Main Duration Text */}
+        <div className={`text-base font-bold ${isCurrentlySleeping ? 'text-indigo-900 font-mono tracking-tight' : 'text-slate-800'}`}>
+          {sleepDurationText}
         </div>
         <p className="text-xs text-slate-500 truncate mt-0.5 font-medium">
-          {sleepSummary}
+          {sleepSubtitle}
         </p>
       </div>
 
@@ -144,7 +168,7 @@ export const StatusCards: React.FC<StatusCardsProps> = ({
         className="bg-white p-3.5 rounded-2xl border border-amber-100 shadow-xs hover:border-amber-300 transition-all cursor-pointer active:scale-[0.98]"
       >
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-lg">
+          <span className="text-[11px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-lg">
             משקל נוכחי
           </span>
           <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center text-amber-600">

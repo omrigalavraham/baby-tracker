@@ -200,11 +200,11 @@ export function App() {
     });
   };
 
-  const handleQuickDiaperPoop = () => {
+  const handleQuickDiaperPoop = (color?: string) => {
     handleSaveEvent({
       type: 'diaper',
       started_at: new Date().toISOString(),
-      details: { diaperType: 'poop', poopColor: 'צהוב חרדלי' }
+      details: { diaperType: 'poop', poopColor: color }
     });
   };
 
@@ -304,6 +304,7 @@ export function App() {
       <Navbar
         profile={profile}
         isSynced={isSynced}
+        isSleeping={!!activeSleep}
         onOpenProfile={() => setProfileModalOpen(true)}
         onOpenSync={() => setSyncModalOpen(true)}
         onOpenExport={() => setExportModalOpen(true)}
@@ -337,7 +338,7 @@ export function App() {
           <QuickActions
             onOpenFeeding={() => setFeedingModalOpen(true)}
             onQuickDiaperPee={handleQuickDiaperPee}
-            onQuickDiaperPoop={handleQuickDiaperPoop}
+            onQuickDiaperPoopWithColor={handleQuickDiaperPoop}
             onOpenDiaperFull={() => setDiaperModalOpen(true)}
             onOpenSleep={() => setSleepModalOpen(true)}
             onOpenWeight={() => setWeightModalOpen(true)}

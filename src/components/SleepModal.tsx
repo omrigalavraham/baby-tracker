@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { X, Check, Moon, Play, Square, Clock } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Check, Moon, Play, Square, Clock, Sparkles } from 'lucide-react';
 import { BabyEvent } from '../types';
+import { formatLiveDuration, formatTime } from '../lib/babyUtils';
 
 interface SleepModalProps {
   isOpen: boolean;
@@ -30,9 +31,17 @@ export const SleepModal: React.FC<SleepModalProps> = ({
   });
   const [notes, setNotes] = useState('');
 
-  if (!isOpen) return null;
-
   const isSleepingNow = !!activeSleepEvent?.details?.isOngoing;
+
+  // Live ticking counter
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!isSleepingNow) return;
+    const interval = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(interval);
+  }, [isSleepingNow]);
+
+  if (!isOpen) return null;
 
   const handleStartLiveSleep = () => {
     onSaveEvent({
@@ -134,24 +143,36 @@ export const SleepModal: React.FC<SleepModalProps> = ({
         {/* Content */}
         <div className="p-5 space-y-4 text-right overflow-y-auto flex-1">
           {mode === 'live' ? (
-            <div className="text-center py-4 space-y-4">
-              <div className="w-20 h-20 mx-auto rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-3xl shadow-inner">
-                {isSleepingNow ? '😴' : '🌙'}
-              </div>
-
+            <div className="text-center py-2 space-y-4">
+              
               {isSleepingNow ? (
                 <>
-                  <div className="space-y-1">
-                    <span className="text-xs bg-indigo-600 text-white px-3 py-1 rounded-full font-bold animate-pulse">
-                      התינוקת ישנה כרגע...
+                  <div className="w-16 h-16 mx-auto rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-3xl shadow-inner animate-pulse">
+                    😴
+                  </div>
+
+                  <div className="space-y-2">
+                    <span className="text-xs bg-indigo-600 text-white px-3 py-1 rounded-full font-bold inline-flex items-center gap-1.5 shadow-xs">
+                      <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                      התינוקת ישנה כעת...
                     </span>
-                    <p className="text-xs text-slate-500 pt-2">
-                      נרדמה ב-
-                      {new Date(activeSleepEvent.started_at).toLocaleTimeString('he-IL', {
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </p>
+
+                    {/* LIVE TICKING STOPWATCH */}
+                    <div className="pt-2">
+                      <div className="text-4xl font-black font-mono tracking-wider text-indigo-950 bg-gradient-to-b from-indigo-50 to-indigo-100/70 py-3.5 px-6 rounded-2xl border border-indigo-200 inline-block shadow-inner">
+                        {formatLiveDuration(activeSleepEvent.started_at).formattedClock}
+                      </div>
+                      <p className="text-sm font-bold text-indigo-700 mt-2">
+                        ישנה כבר {formatLiveDuration(activeSleepEvent.started_at).formattedText}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        החלה ב-{formatTime(activeSleepEvent.started_at)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-indigo-50/60 rounded-2xl border border-indigo-100 text-xs text-indigo-800 text-right">
+                    💡 <strong>אפשר לצאת מהחלון חופשי:</strong> הזמן ממשיך להימדד ברקע ובטלפון של בן/בת הזוג. כשתתעורר לחצו כאן כדי לשמור.
                   </div>
 
                   <button
@@ -164,10 +185,14 @@ export const SleepModal: React.FC<SleepModalProps> = ({
                 </>
               ) : (
                 <>
+                  <div className="w-20 h-20 mx-auto rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-3xl shadow-inner">
+                    🌙
+                  </div>
+
                   <div className="space-y-1">
                     <h3 className="font-bold text-slate-800 text-base">התינוקת נרדמת עכשיו?</h3>
                     <p className="text-xs text-slate-500 max-w-xs mx-auto">
-                      לחץ כאן כדי להתחיל מעקב שינה. כשתתעורר, לחץ שוב לסיום ותקבל חישוב מדויק של משך השינה.
+                      לחצו כאן להתחלת הטיימר. תוכלו לראות בכל רגע כמה זמן היא כבר ישנה.
                     </p>
                   </div>
 

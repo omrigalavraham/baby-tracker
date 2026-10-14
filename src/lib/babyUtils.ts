@@ -86,6 +86,43 @@ export function formatTimeAgo(isoString?: string): string {
 }
 
 /**
+ * Format live elapsed duration from a start ISO string (for live sleep counter)
+ */
+export function formatLiveDuration(isoStartedAt: string): {
+  totalSeconds: number;
+  hours: number;
+  minutes: number;
+  seconds: number;
+  formattedClock: string;
+  formattedText: string;
+} {
+  const start = new Date(isoStartedAt).getTime();
+  const diffSec = Math.max(0, Math.floor((Date.now() - start) / 1000));
+
+  const hours = Math.floor(diffSec / 3600);
+  const minutes = Math.floor((diffSec % 3600) / 60);
+  const seconds = diffSec % 60;
+
+  const hh = String(hours).padStart(2, '0');
+  const mm = String(minutes).padStart(2, '0');
+  const ss = String(seconds).padStart(2, '0');
+  const formattedClock = hours > 0 ? `${hh}:${mm}:${ss}` : `${mm}:${ss}`;
+
+  let formattedText = '';
+  if (diffSec < 60) {
+    formattedText = `${seconds} שניות`;
+  } else if (hours === 0) {
+    formattedText = `${minutes} דקות`;
+  } else if (hours === 1) {
+    formattedText = `שעה ${minutes > 0 ? `ו-${minutes} דק'` : ''}`;
+  } else {
+    formattedText = `${hours} שעות ${minutes > 0 ? `ו-${minutes} דק'` : ''}`;
+  }
+
+  return { totalSeconds: diffSec, hours, minutes, seconds, formattedClock, formattedText };
+}
+
+/**
  * Format time of day (e.g. "14:35")
  */
 export function formatTime(isoString: string): string {
