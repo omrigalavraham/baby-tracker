@@ -211,30 +211,7 @@ export const FeedingModal: React.FC<FeedingModalProps> = ({
 
               {/* Side Toggles */}
               <div className="grid grid-cols-2 gap-3">
-                {/* Left Side */}
-                <button
-                  onClick={() => {
-                    setActiveSide('left');
-                    setTimerRunning(true);
-                  }}
-                  className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-1 ${
-                    activeSide === 'left' && timerRunning
-                      ? 'border-rose-500 bg-rose-50/80 text-rose-700 shadow-md ring-2 ring-rose-200'
-                      : 'border-slate-200 bg-slate-50/60 text-slate-700 hover:border-slate-300'
-                  }`}
-                >
-                  <span className="text-xs font-semibold">שד שמאל</span>
-                  <span className="text-2xl font-bold font-mono">
-                    {formatTimerDigits(secondsLeft)}
-                  </span>
-                  {activeSide === 'left' && timerRunning && (
-                    <span className="text-[10px] bg-rose-500 text-white px-2 py-0.5 rounded-full font-medium animate-pulse mt-1">
-                      מניקה כעת...
-                    </span>
-                  )}
-                </button>
-
-                {/* Right Side */}
+                {/* Right Side (appears on the right) */}
                 <button
                   onClick={() => {
                     setActiveSide('right');
@@ -251,6 +228,29 @@ export const FeedingModal: React.FC<FeedingModalProps> = ({
                     {formatTimerDigits(secondsRight)}
                   </span>
                   {activeSide === 'right' && timerRunning && (
+                    <span className="text-[10px] bg-rose-500 text-white px-2 py-0.5 rounded-full font-medium animate-pulse mt-1">
+                      מניקה כעת...
+                    </span>
+                  )}
+                </button>
+
+                {/* Left Side (appears on the left) */}
+                <button
+                  onClick={() => {
+                    setActiveSide('left');
+                    setTimerRunning(true);
+                  }}
+                  className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-1 ${
+                    activeSide === 'left' && timerRunning
+                      ? 'border-rose-500 bg-rose-50/80 text-rose-700 shadow-md ring-2 ring-rose-200'
+                      : 'border-slate-200 bg-slate-50/60 text-slate-700 hover:border-slate-300'
+                  }`}
+                >
+                  <span className="text-xs font-semibold">שד שמאל</span>
+                  <span className="text-2xl font-bold font-mono">
+                    {formatTimerDigits(secondsLeft)}
+                  </span>
+                  {activeSide === 'left' && timerRunning && (
                     <span className="text-[10px] bg-rose-500 text-white px-2 py-0.5 rounded-full font-medium animate-pulse mt-1">
                       מניקה כעת...
                     </span>
