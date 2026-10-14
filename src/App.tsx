@@ -33,8 +33,10 @@ import { BabyProfileModal } from './components/BabyProfileModal';
 import { SyncSettingsModal } from './components/SyncSettingsModal';
 import { ExportDataModal } from './components/ExportDataModal';
 import { SplashScreen } from './components/SplashScreen';
+import { SummaryTab } from './components/SummaryTab';
+import { InsightsTab } from './components/InsightsTab';
 
-import { Activity, Sparkles } from 'lucide-react';
+import { Activity, Sparkles, BarChart3, Lightbulb } from 'lucide-react';
 
 export function App() {
   const [showSplash, setShowSplash] = useState(true);
@@ -42,7 +44,7 @@ export function App() {
   const [events, setEvents] = useState<BabyEvent[]>(loadLocalEvents);
   const [completedMilestones, setCompletedMilestones] = useState<string[]>(loadCompletedMilestones);
   const [isSynced, setIsSynced] = useState<boolean>(false);
-  const [mainTab, setMainTab] = useState<'tracker' | 'milestones'>('tracker');
+  const [mainTab, setMainTab] = useState<'tracker' | 'summary' | 'insights' | 'milestones'>('tracker');
 
   // PWA Install Prompt State
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -321,8 +323,8 @@ export function App() {
         />
       )}
 
-      {/* Main View: Tracker or Milestones */}
-      {mainTab === 'tracker' ? (
+      {/* Main View: Tracker, Summary, Insights, or Milestones */}
+      {mainTab === 'tracker' && (
         <main className="space-y-3 pt-2">
           {/* Quick status cards (Last feeding, last diaper, sleep) */}
           <StatusCards
@@ -352,9 +354,30 @@ export function App() {
             onDeleteEvent={handleDeleteEvent}
           />
         </main>
-      ) : (
+      )}
+
+      {mainTab === 'summary' && (
         <main className="pt-2">
-          {/* Milestones and Developmental Activities */}
+          <SummaryTab
+            events={events}
+            profile={profile}
+          />
+        </main>
+      )}
+
+      {mainTab === 'insights' && (
+        <main className="pt-2">
+          <InsightsTab
+            events={events}
+            profile={profile}
+            onOpenFeeding={() => setFeedingModalOpen(true)}
+            onOpenSleep={() => setSleepModalOpen(true)}
+          />
+        </main>
+      )}
+
+      {mainTab === 'milestones' && (
+        <main className="pt-2">
           <MilestonesTab
             profile={profile}
             completedMilestones={completedMilestones}
@@ -363,32 +386,60 @@ export function App() {
         </main>
       )}
 
-      {/* Bottom Sticky Tab Navigation */}
+      {/* Bottom Sticky Tab Navigation - 4 Smart Tabs */}
       <nav className="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-rose-100 safe-bottom z-30 shadow-lg">
-        <div className="max-w-md mx-auto grid grid-cols-2 px-6 py-2 gap-3">
+        <div className="max-w-md mx-auto grid grid-cols-4 px-2 py-1.5 gap-1">
+          {/* Tab 1: Tracker */}
           <button
             onClick={() => setMainTab('tracker')}
             className={`flex flex-col items-center justify-center py-1.5 rounded-xl transition-all ${
               mainTab === 'tracker'
-                ? 'text-rose-600 font-bold bg-rose-50/80'
+                ? 'text-rose-600 font-bold bg-rose-50/80 shadow-2xs'
                 : 'text-slate-400 font-medium hover:text-slate-600'
             }`}
           >
-            <Activity className="w-5 h-5 mb-0.5" />
-            <span className="text-xs">מעקב יומי</span>
+            <Activity className="w-4 h-4 mb-0.5" />
+            <span className="text-[11px]">יומן</span>
           </button>
 
+          {/* Tab 2: Comprehensive Summary */}
+          <button
+            onClick={() => setMainTab('summary')}
+            className={`flex flex-col items-center justify-center py-1.5 rounded-xl transition-all ${
+              mainTab === 'summary'
+                ? 'text-indigo-600 font-bold bg-indigo-50/80 shadow-2xs'
+                : 'text-slate-400 font-medium hover:text-slate-600'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4 mb-0.5" />
+            <span className="text-[11px]">מעקב כולל</span>
+          </button>
+
+          {/* Tab 3: Smart Insights */}
+          <button
+            onClick={() => setMainTab('insights')}
+            className={`flex flex-col items-center justify-center py-1.5 rounded-xl transition-all relative ${
+              mainTab === 'insights'
+                ? 'text-amber-600 font-bold bg-amber-50/80 shadow-2xs'
+                : 'text-slate-400 font-medium hover:text-slate-600'
+            }`}
+          >
+            <Lightbulb className="w-4 h-4 mb-0.5" />
+            <span className="text-[11px]">תובנות</span>
+            <span className="absolute top-1 right-3 w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+          </button>
+
+          {/* Tab 4: Milestones & Activities */}
           <button
             onClick={() => setMainTab('milestones')}
             className={`flex flex-col items-center justify-center py-1.5 rounded-xl transition-all relative ${
               mainTab === 'milestones'
-                ? 'text-rose-600 font-bold bg-rose-50/80'
+                ? 'text-pink-600 font-bold bg-pink-50/80 shadow-2xs'
                 : 'text-slate-400 font-medium hover:text-slate-600'
             }`}
           >
-            <Sparkles className="w-5 h-5 mb-0.5 text-pink-500" />
-            <span className="text-xs">התפתחות ומשימות</span>
-            <span className="absolute top-1 right-8 w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+            <Sparkles className="w-4 h-4 mb-0.5" />
+            <span className="text-[11px]">התפתחות</span>
           </button>
         </div>
       </nav>
