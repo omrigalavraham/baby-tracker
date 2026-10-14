@@ -86,3 +86,22 @@ export interface ActivityTask {
   tip: string;
   category: 'זמן בטן' | 'משחקי ראייה' | 'חיבור ורוגע' | 'מוזיקה ושפה';
 }
+
+export interface DailyReminderItem {
+  id: string;
+  title: string;
+  description?: string;
+  category: 'vitamin' | 'iron' | 'medication' | 'bath' | 'appointment' | 'custom';
+  icon: string;
+  time: string; // 'HH:MM'
+  enabled: boolean;
+  lastCompletedDate?: string; // 'YYYY-MM-DD'
+  customNote?: string;
+}
+
+export interface SmartTimersConfig {
+  feedingIntervalMinutes: number; // e.g. 180 (3 hours), 0 = disabled
+  wakeWindowMinutes: number;      // e.g. 75, 0 = disabled
+  stopwatchAlertMinutes: number;   // e.g. 60, 0 = disabled
+  notificationsEnabled: boolean;
+}

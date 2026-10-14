@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { BabyEvent, BabyProfile } from './types';
+import { BabyEvent, BabyProfile, DailyReminderItem, SmartTimersConfig } from './types';
 import { 
   loadLocalProfile, 
   saveLocalProfile, 
@@ -7,7 +7,11 @@ import {
   saveLocalEvents, 
   loadCompletedMilestones, 
   saveCompletedMilestones,
-  getFamilyCodeFromUrl
+  getFamilyCodeFromUrl,
+  loadLocalReminders,
+  saveLocalReminders,
+  loadSmartTimersConfig,
+  saveSmartTimersConfig
 } from './lib/storage';
 import { 
   isSupabaseConfigured, 
@@ -25,6 +29,7 @@ import { StatusCards } from './components/StatusCards';
 import { QuickActions } from './components/QuickActions';
 import { TimelineList } from './components/TimelineList';
 import { MilestonesTab } from './components/MilestonesTab';
+import { RemindersTab } from './components/RemindersTab';
 import { FeedingModal } from './components/FeedingModal';
 import { DiaperModal } from './components/DiaperModal';
 import { SleepModal } from './components/SleepModal';
@@ -36,15 +41,19 @@ import { SplashScreen } from './components/SplashScreen';
 import { SummaryTab } from './components/SummaryTab';
 import { InsightsTab } from './components/InsightsTab';
 
-import { Activity, Sparkles, BarChart3, Lightbulb } from 'lucide-react';
+import { showAppNotification, playGentleChime } from './lib/notificationService';
+import confetti from 'canvas-confetti';
+import { Activity, Sparkles, BarChart3, Lightbulb, Bell } from 'lucide-react';
 
 export function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [profile, setProfile] = useState<BabyProfile>(loadLocalProfile);
   const [events, setEvents] = useState<BabyEvent[]>(loadLocalEvents);
   const [completedMilestones, setCompletedMilestones] = useState<string[]>(loadCompletedMilestones);
+  const [reminders, setReminders] = useState<DailyReminderItem[]>(loadLocalReminders);
+  const [smartTimers, setSmartTimers] = useState<SmartTimersConfig>(loadSmartTimersConfig);
   const [isSynced, setIsSynced] = useState<boolean>(false);
-  const [mainTab, setMainTab] = useState<'tracker' | 'summary' | 'insights' | 'milestones'>('tracker');
+  const [mainTab, setMainTab] = useState<'tracker' | 'reminders' | 'summary' | 'insights' | 'milestones'>('tracker');
 
   // PWA Install Prompt State
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -306,6 +315,106 @@ export function App() {
     }
   };
 
+  // Reminders handlers
+  const handleUpdateReminders = (updated: DailyReminderItem[]) => {
+    setReminders(updated);
+    saveLocalReminders(updated);
+  };
+
+  const handleUpdateSmartTimers = (updated: SmartTimersConfig) => {
+    setSmartTimers(updated);
+    saveSmartTimersConfig(updated);
+  };
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const pendingDailyReminders = reminders.filter(r => r.enabled && r.lastCompletedDate !== todayStr);
+
+  const handleToggleReminderComplete = (item: DailyReminderItem) => {
+    const isDone = item.lastCompletedDate === todayStr;
+    const newDate = isDone ? undefined : todayStr;
+    if (!isDone) {
+      confetti({
+        particleCount: 40,
+        spread: 60,
+        origin: { y: 0.6 }
+      });
+      playGentleChime();
+    }
+    const updated = reminders.map(r => r.id === item.id ? { ...r, lastCompletedDate: newDate } : r);
+    handleUpdateReminders(updated);
+  };
+
+  // Background timer for alerts & reminders (every 30s)
+  useEffect(() => {
+    if (!smartTimers.notificationsEnabled) return;
+
+    const checkAlerts = () => {
+      const now = new Date();
+      const currentHours = String(now.getHours()).padStart(2, '0');
+      const currentMins = String(now.getMinutes()).padStart(2, '0');
+      const currentTimeStr = `${currentHours}:${currentMins}`;
+      const currentDay = now.toISOString().slice(0, 10);
+
+      // 1. Check daily reminders scheduled for now
+      reminders.forEach(rem => {
+        if (rem.enabled && rem.time === currentTimeStr && rem.lastCompletedDate !== currentDay) {
+          showAppNotification(`תזכורת יומית: ${rem.title} ⏰`, {
+            body: rem.description || `הגיע הזמן לביצוע ${rem.title}!`,
+            tag: `daily-${rem.id}-${currentDay}`,
+            cooldownMinutes: 30
+          });
+        }
+      });
+
+      // 2. Check feeding interval
+      if (smartTimers.feedingIntervalMinutes > 0) {
+        const lastFeed = events.find(e => e.type === 'feeding');
+        if (lastFeed) {
+          const elapsedMinutes = Math.floor((Date.now() - new Date(lastFeed.started_at).getTime()) / 60000);
+          if (elapsedMinutes >= smartTimers.feedingIntervalMinutes) {
+            const hours = Math.floor(smartTimers.feedingIntervalMinutes / 60);
+            const timeDesc = hours > 0 ? `${hours} שעות` : `${smartTimers.feedingIntervalMinutes} דקות`;
+            showAppNotification('הגיע זמן האכלה 🍼', {
+              body: `עברו ${timeDesc} מאז ההאכלה האחרונה. האם היא רעבה?`,
+              tag: 'feeding-interval',
+              cooldownMinutes: 30
+            });
+          }
+        }
+      }
+
+      // 3. Check wake window (if baby is awake)
+      if (!activeSleep && smartTimers.wakeWindowMinutes > 0) {
+        const lastEndedSleep = events.find(e => e.type === 'sleep' && e.ended_at);
+        if (lastEndedSleep) {
+          const awakeMinutes = Math.floor((Date.now() - new Date(lastEndedSleep.ended_at!).getTime()) / 60000);
+          if (awakeMinutes >= smartTimers.wakeWindowMinutes) {
+            showAppNotification('מתקרב חלון שינה 😴', {
+              body: `הקטנה ערה כבר ${awakeMinutes} דקות. כדאי להתחיל להרדים כדי למנוע עייפות יתר.`,
+              tag: 'wake-window',
+              cooldownMinutes: 30
+            });
+          }
+        }
+      }
+
+      // 4. Check active stopwatch alert
+      if (activeSleep && smartTimers.stopwatchAlertMinutes > 0) {
+        const sleepMinutes = Math.floor((Date.now() - new Date(activeSleep.started_at).getTime()) / 60000);
+        if (sleepMinutes >= smartTimers.stopwatchAlertMinutes) {
+          showAppNotification('טיימר שינה פועל 💤', {
+            body: `השינה נמשכת כבר מעל ${Math.floor(sleepMinutes / 60)} שעות. האם הקטנה כבר התעוררה?`,
+            tag: 'sleep-stopwatch',
+            cooldownMinutes: 45
+          });
+        }
+      }
+    };
+
+    const interval = setInterval(checkAlerts, 30000);
+    return () => clearInterval(interval);
+  }, [reminders, smartTimers, events, activeSleep]);
+
   return (
     <div className="min-h-screen bg-rose-50/40 pb-24 text-slate-800">
       
@@ -330,9 +439,41 @@ export function App() {
         />
       )}
 
-      {/* Main View: Tracker, Summary, Insights, or Milestones */}
+      {/* Main View: Tracker, Reminders, Summary, Insights, or Milestones */}
       {mainTab === 'tracker' && (
         <main className="space-y-3 pt-2">
+
+          {/* Gentle Daily Reminder Banner in Tracker View */}
+          {pendingDailyReminders.length > 0 && (
+            <div className="bg-gradient-to-r from-amber-50 to-rose-50 border border-rose-200/70 rounded-2xl p-3 flex items-center justify-between gap-2 shadow-2xs">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <span className="text-xl shrink-0">{pendingDailyReminders[0].icon}</span>
+                <div className="truncate flex-1 min-w-0">
+                  <p className="text-xs font-bold text-slate-800 truncate">
+                    תזכורת: {pendingDailyReminders[0].title}
+                  </p>
+                  <p className="text-[10px] text-slate-500 truncate">
+                    {pendingDailyReminders.length > 1 ? `ועוד ${pendingDailyReminders.length - 1} משימות להיום` : 'טרם סומן כבוצע להיום'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  onClick={() => handleToggleReminderComplete(pendingDailyReminders[0])}
+                  className="px-3 py-1.5 bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 text-white rounded-xl text-xs font-bold active:scale-95 transition-all shadow-xs"
+                >
+                  סמן כבוצע ✅
+                </button>
+                <button
+                  onClick={() => setMainTab('reminders')}
+                  className="text-[10px] text-rose-600 font-bold px-2 py-1.5 rounded-xl hover:bg-rose-100/60"
+                >
+                  הכל ➔
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Quick status cards (Last feeding, last diaper, sleep) */}
           <StatusCards
             events={events}
@@ -359,6 +500,20 @@ export function App() {
           <TimelineList
             events={events}
             onDeleteEvent={handleDeleteEvent}
+          />
+        </main>
+      )}
+
+      {mainTab === 'reminders' && (
+        <main className="pt-2">
+          <RemindersTab
+            profile={profile}
+            events={events}
+            activeSleep={activeSleep || null}
+            reminders={reminders}
+            smartTimers={smartTimers}
+            onUpdateReminders={handleUpdateReminders}
+            onUpdateSmartTimers={handleUpdateSmartTimers}
           />
         </main>
       )}
@@ -393,9 +548,9 @@ export function App() {
         </main>
       )}
 
-      {/* Bottom Sticky Tab Navigation - 4 Smart Tabs */}
+      {/* Bottom Sticky Tab Navigation - 5 Smart Tabs */}
       <nav className="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-rose-100 safe-bottom z-30 shadow-lg">
-        <div className="max-w-md mx-auto grid grid-cols-4 px-2 py-1.5 gap-1">
+        <div className="max-w-md mx-auto grid grid-cols-5 px-1 py-1.5 gap-0.5">
           {/* Tab 1: Tracker */}
           <button
             onClick={() => setMainTab('tracker')}
@@ -406,10 +561,28 @@ export function App() {
             }`}
           >
             <Activity className="w-4 h-4 mb-0.5" />
-            <span className="text-[11px]">יומן</span>
+            <span className="text-[10px] sm:text-[11px]">יומן</span>
           </button>
 
-          {/* Tab 2: Comprehensive Summary */}
+          {/* Tab 2: Reminders & Routine */}
+          <button
+            onClick={() => setMainTab('reminders')}
+            className={`flex flex-col items-center justify-center py-1.5 rounded-xl transition-all relative ${
+              mainTab === 'reminders'
+                ? 'text-rose-600 font-bold bg-rose-50/80 shadow-2xs'
+                : 'text-slate-400 font-medium hover:text-slate-600'
+            }`}
+          >
+            <Bell className="w-4 h-4 mb-0.5" />
+            <span className="text-[10px] sm:text-[11px]">תזכורות</span>
+            {pendingDailyReminders.length > 0 && (
+              <span className="absolute top-1 right-2.5 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center shadow-2xs">
+                {pendingDailyReminders.length}
+              </span>
+            )}
+          </button>
+
+          {/* Tab 3: Comprehensive Summary */}
           <button
             onClick={() => setMainTab('summary')}
             className={`flex flex-col items-center justify-center py-1.5 rounded-xl transition-all ${
@@ -419,10 +592,10 @@ export function App() {
             }`}
           >
             <BarChart3 className="w-4 h-4 mb-0.5" />
-            <span className="text-[11px]">מעקב כולל</span>
+            <span className="text-[10px] sm:text-[11px]">מעקב</span>
           </button>
 
-          {/* Tab 3: Smart Insights */}
+          {/* Tab 4: Smart Insights */}
           <button
             onClick={() => setMainTab('insights')}
             className={`flex flex-col items-center justify-center py-1.5 rounded-xl transition-all relative ${
@@ -432,11 +605,11 @@ export function App() {
             }`}
           >
             <Lightbulb className="w-4 h-4 mb-0.5" />
-            <span className="text-[11px]">תובנות</span>
-            <span className="absolute top-1 right-3 w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+            <span className="text-[10px] sm:text-[11px]">תובנות</span>
+            <span className="absolute top-1 right-2.5 w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
           </button>
 
-          {/* Tab 4: Milestones & Activities */}
+          {/* Tab 5: Milestones & Activities */}
           <button
             onClick={() => setMainTab('milestones')}
             className={`flex flex-col items-center justify-center py-1.5 rounded-xl transition-all relative ${
@@ -446,7 +619,7 @@ export function App() {
             }`}
           >
             <Sparkles className="w-4 h-4 mb-0.5" />
-            <span className="text-[11px]">התפתחות</span>
+            <span className="text-[10px] sm:text-[11px]">התפתחות</span>
           </button>
         </div>
       </nav>

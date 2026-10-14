@@ -1,4 +1,4 @@
-import { BabyEvent, BabyProfile } from '../types';
+import { BabyEvent, BabyProfile, DailyReminderItem, SmartTimersConfig } from '../types';
 
 const BABY_PROFILE_KEY = 'avigi_baby_profile';
 const BABY_EVENTS_KEY = 'avigi_baby_events';
@@ -86,4 +86,89 @@ export function loadCompletedMilestones(): string[] {
 
 export function saveCompletedMilestones(milestoneIds: string[]): void {
   localStorage.setItem(COMPLETED_MILESTONES_KEY, JSON.stringify(milestoneIds));
+}
+
+const REMINDERS_KEY = 'avigi_daily_reminders';
+const SMART_TIMERS_KEY = 'avigi_smart_timers';
+
+export function getDefaultDailyReminders(): DailyReminderItem[] {
+  return [
+    {
+      id: 'rem_vitamin_d',
+      title: 'טיפות ויטמין D',
+      description: 'מתן 2 טיפות ויטמין D (הנחיית טיפת חלב עד גיל שנה)',
+      category: 'vitamin',
+      icon: '☀️',
+      time: '10:00',
+      enabled: true
+    },
+    {
+      id: 'rem_bath',
+      title: 'אמבטיית ערב חמימה',
+      description: 'הרגעה, מים נעימים והכנה לקראת שנת הלילה',
+      category: 'bath',
+      icon: '🛁',
+      time: '19:30',
+      enabled: true
+    },
+    {
+      id: 'rem_tummy_time',
+      title: 'זמן בטן מודרך',
+      description: 'חיזוק שרירי הצוואר והגב (כשהיא ערה ובמצב רוח טוב)',
+      category: 'custom',
+      icon: '🐢',
+      time: '11:30',
+      enabled: true
+    },
+    {
+      id: 'rem_iron',
+      title: 'טיפות ברזל יומיות',
+      description: 'תוסף ברזל (המלצת משרד הבריאות מגיל 4 חודשים)',
+      category: 'iron',
+      icon: '💧',
+      time: '17:00',
+      enabled: false
+    }
+  ];
+}
+
+export function getDefaultSmartTimers(): SmartTimersConfig {
+  return {
+    feedingIntervalMinutes: 180, // 3 hours
+    wakeWindowMinutes: 75,       // 75 min
+    stopwatchAlertMinutes: 60,   // 60 min
+    notificationsEnabled: true
+  };
+}
+
+export function loadLocalReminders(): DailyReminderItem[] {
+  const saved = localStorage.getItem(REMINDERS_KEY);
+  if (!saved) return getDefaultDailyReminders();
+  try {
+    const parsed = JSON.parse(saved);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed;
+    }
+    return getDefaultDailyReminders();
+  } catch {
+    return getDefaultDailyReminders();
+  }
+}
+
+export function saveLocalReminders(reminders: DailyReminderItem[]): void {
+  localStorage.setItem(REMINDERS_KEY, JSON.stringify(reminders));
+}
+
+export function loadSmartTimersConfig(): SmartTimersConfig {
+  const saved = localStorage.getItem(SMART_TIMERS_KEY);
+  if (!saved) return getDefaultSmartTimers();
+  try {
+    return { ...getDefaultSmartTimers(), ...JSON.parse(saved) };
+  } catch {
+    return getDefaultSmartTimers();
+  }
+}
+
+export function saveSmartTimersConfig(config: SmartTimersConfig): void {
+  localStorage.setItem(SMART_TIMERS_KEY, JSON.stringify(config));
 }
