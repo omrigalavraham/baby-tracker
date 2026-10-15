@@ -79,6 +79,19 @@
   color-scheme: light dark;
 }
 
+/*
+ * Samsung Internet only skips its forced dark theme for sites that answer
+ * prefers-color-scheme themselves. Our night mode is class-based, so restate
+ * the day palette here: no visual change, but the browser leaves the colors alone.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not(.night) {
+    --c-ground: #FBF7F3;
+    --c-surface: #FFFFFF;
+    --c-ink: #3E3533;
+  }
+}
+
 /* ...but native controls (time pickers, selects) follow our own mode, not the OS */
 input, select, textarea {
   color-scheme: light;

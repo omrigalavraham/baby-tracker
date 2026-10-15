@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Check, Baby } from 'lucide-react';
 import { BabyProfile } from '../types';
 import { Sheet, Button, Field, fieldClass, Choice } from './ui';
@@ -24,6 +24,17 @@ export const BabyProfileModal: React.FC<BabyProfileModalProps> = ({
   const [birthTime, setBirthTime] = useState(profile.birth_time || '12:00');
   const [birthWeight, setBirthWeight] = useState(profile.birth_weight?.toString() || '3.200');
   const [gender, setGender] = useState<'girl' | 'boy'>(profile.gender || 'girl');
+
+  // Refill from the latest profile each time the sheet opens (it may have changed on the other phone)
+  useEffect(() => {
+    if (!isOpen) return;
+    setName(profile.name || '');
+    setBirthDate(profile.birth_date || localDateKey());
+    setBirthTime(profile.birth_time || '12:00');
+    setBirthWeight(profile.birth_weight?.toString() || '3.200');
+    setGender(profile.gender || 'girl');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

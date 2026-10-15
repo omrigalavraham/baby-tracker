@@ -20,7 +20,8 @@ import {
   fetchEventsFromSupabase, 
   addEventToSupabase, 
   deleteEventFromSupabase,
-  subscribeToRealtimeEvents
+  subscribeToRealtimeEvents,
+  subscribeToRealtimeBaby
 } from './lib/supabase';
 
 // Components
@@ -154,6 +155,8 @@ export function App() {
   // Supabase Initial Sync & Realtime Subscription
   useEffect(() => {
     let channel: any = null;
+    let babyChannel: any = null;
+    let cancelled = false;
 
     async function initSupabase() {
       if (!isSupabaseConfigured()) {
@@ -183,6 +186,17 @@ export function App() {
           await addEventToSupabase(ev);
         }
       }
+
+      if (cancelled) return;
+
+      // Profile edits (name, birth date, birth weight) from the other phone
+      babyChannel = subscribeToRealtimeBaby(profile.id, remote => {
+        setProfile(prev => {
+          const merged = { ...prev, ...remote };
+          saveLocalProfile(merged);
+          return merged;
+        });
+      });
 
       // 3. Realtime subscription: When Dad updates something, Mom sees it instantly!
       channel = subscribeToRealtimeEvents(profile.id, (payload) => {
@@ -217,11 +231,53 @@ export function App() {
     initSupabase();
 
     return () => {
-      if (channel) {
-        channel.unsubscribe();
-      }
+      cancelled = true;
+      channel?.unsubscribe();
+      babyChannel?.unsubscribe();
     };
   }, [profile.id]);
+
+  // Android drops the live connection while the app is in the background,
+  // so catch up with the other phone whenever the app comes back.
+  useEffect(() => {
+    if (!isSynced) return;
+    let last = 0;
+    const refresh = async () => {
+      if (document.visibilityState !== 'visible' || Date.now() - last < 5000) return;
+      last = Date.now();
+
+      const remoteBaby = await fetchBabyFromSupabase(profile.id);
+      if (remoteBaby) {
+        setProfile(prev => {
+          const merged = { ...prev, ...remoteBaby };
+          saveLocalProfile(merged);
+          return merged;
+        });
+      }
+
+      const remoteEvents = await fetchEventsFromSupabase(profile.id);
+      if (remoteEvents.length > 0) {
+        setEvents(prev => {
+          // Server is the truth; keep only very recent local entries that may still be uploading
+          const remoteIds = new Set(remoteEvents.map(e => e.id));
+          const pending = prev.filter(e => !remoteIds.has(e.id) && Date.now() - new Date(e.created_at).getTime() < 2 * 60000);
+          const merged = [...pending, ...remoteEvents].sort(
+            (a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime()
+          );
+          saveLocalEvents(merged);
+          return merged;
+        });
+      }
+    };
+    document.addEventListener('visibilitychange', refresh);
+    window.addEventListener('online', refresh);
+    window.addEventListener('focus', refresh);
+    return () => {
+      document.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener('online', refresh);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [isSynced, profile.id]);
 
   // Save new event helper
   const handleSaveEvent = useCallback((eventData: Partial<BabyEvent>) => {

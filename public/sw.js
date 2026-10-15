@@ -1,5 +1,5 @@
 // Minimal Service Worker for PWA installability and offline caching
-const CACHE_NAME = 'baby-tracker-v3';
+const CACHE_NAME = 'baby-tracker-v4';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -61,7 +61,11 @@ self.addEventListener('push', (event) => {
       dir: 'rtl',
       lang: 'he',
       renotify: true,
-      vibrate: [120, 80, 120]
+      // Stays until handled, so it isn't missed on a locked phone
+      requireInteraction: true,
+      silent: false,
+      timestamp: Date.now(),
+      vibrate: [200, 100, 200]
     })
   );
 });

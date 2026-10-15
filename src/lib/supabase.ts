@@ -238,3 +238,30 @@ export function subscribeToRealtimeEvents(
     return null;
   }
 }
+
+/**
+ * Subscribe to profile changes (name, birth date, weight) made on another device
+ */
+export function subscribeToRealtimeBaby(
+  babyId: string,
+  onChange: (baby: BabyProfile) => void
+): RealtimeChannel | null {
+  const client = getSupabaseClient();
+  if (!client) return null;
+
+  try {
+    return client
+      .channel(`realtime:babies:${babyId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'babies', filter: `id=eq.${babyId}` },
+        (payload: any) => {
+          if (payload.new && payload.new.id) onChange(payload.new as BabyProfile);
+        }
+      )
+      .subscribe();
+  } catch (err) {
+    console.error('Failed to setup baby Realtime subscription:', err);
+    return null;
+  }
+}
