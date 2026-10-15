@@ -277,7 +277,11 @@ export function App() {
     document.addEventListener('visibilitychange', refresh);
     window.addEventListener('online', refresh);
     window.addEventListener('focus', refresh);
+    // The live connection can also die silently while the app stays open on screen,
+    // so check the server every half minute as a safety net (only while visible)
+    const poll = setInterval(refresh, 30000);
     return () => {
+      clearInterval(poll);
       document.removeEventListener('visibilitychange', refresh);
       window.removeEventListener('online', refresh);
       window.removeEventListener('focus', refresh);
