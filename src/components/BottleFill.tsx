@@ -89,14 +89,14 @@ export const BottleFill: React.FC<BottleFillProps> = ({ value, onChange, min = 1
   }, [max]);
 
   // Shared drag logic for the bottle and the slider: y position -> amount
-  const lastHapticStep = useRef(Math.round(value / 10));
+  const lastHapticStep = useRef(value);
   const setFromRatio = (ratio: number) => {
     const raw = Math.max(0, Math.min(1, ratio)) * max;
     const ml = Math.max(min, Math.min(max, Math.round(raw / step) * step));
-    const tenStep = Math.round(ml / 10);
-    if (tenStep !== lastHapticStep.current) {
-      lastHapticStep.current = tenStep;
-      haptic(3);
+    // A tiny tick for every step up or down
+    if (ml !== lastHapticStep.current) {
+      lastHapticStep.current = ml;
+      haptic(8);
     }
     if (ml !== value) onChange(ml);
   };
@@ -126,12 +126,36 @@ export const BottleFill: React.FC<BottleFillProps> = ({ value, onChange, min = 1
 
   return (
     <div className="flex items-center justify-center gap-6 select-none">
-      {/* Big number */}
-      <div className="flex flex-col items-center min-w-[92px]">
-        <span className="text-[52px] leading-none font-medium tabular-nums text-ink">{value}</span>
-        <span className="text-[15px] text-muted mt-1">מ"ל</span>
+      {/* Vertical slider */}
+      <div
+        role="slider"
+        tabIndex={0}
+        aria-label='כמות במ"ל'
+        aria-valuemin={min}
+        aria-valuemax={max}
+        aria-valuenow={value}
+        aria-orientation="vertical"
+        onKeyDown={e => {
+          if (e.key === 'ArrowUp' || e.key === 'ArrowRight') onChange(Math.min(max, value + step));
+          if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') onChange(Math.max(min, value - step));
+        }}
+        className="relative w-14 h-[220px] rounded-full bg-sunken touch-none cursor-ns-resize focus-visible:outline-2 focus-visible:outline-primary shrink-0"
+        {...dragHandlers(sliderRatio)}
+      >
+        <div
+          className="absolute inset-x-0 bottom-0 rounded-full bg-feed-soft transition-[height] duration-150 ease-out"
+          style={{ height: `calc(28px + ${pct} * (100% - 28px))` }}
+        />
+        <div
+          className={cx(
+            'absolute left-1/2 -translate-x-1/2 w-12 h-12 rounded-full bg-surface shadow-float flex flex-col items-center justify-center gap-[3px] transition-[bottom] duration-150 ease-out'
+          )}
+          style={{ bottom: `calc(4px + ${pct} * (100% - 56px))` }}
+        >
+          <span className="w-4 h-[2px] rounded-full bg-faint" />
+          <span className="w-4 h-[2px] rounded-full bg-faint" />
+        </div>
       </div>
-
       {/* Bottle */}
       <svg
         width={W}
@@ -185,36 +209,12 @@ export const BottleFill: React.FC<BottleFillProps> = ({ value, onChange, min = 1
         <rect x={BODY.x + 9} y={BODY.y + 18} width="6" height={BODY.h - 44} rx="3" fill="#fff" opacity="0.35" />
       </svg>
 
-      {/* Vertical slider */}
-      <div
-        role="slider"
-        tabIndex={0}
-        aria-label='כמות במ"ל'
-        aria-valuemin={min}
-        aria-valuemax={max}
-        aria-valuenow={value}
-        aria-orientation="vertical"
-        onKeyDown={e => {
-          if (e.key === 'ArrowUp' || e.key === 'ArrowRight') onChange(Math.min(max, value + step));
-          if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') onChange(Math.max(min, value - step));
-        }}
-        className="relative w-14 h-[220px] rounded-full bg-sunken touch-none cursor-ns-resize focus-visible:outline-2 focus-visible:outline-primary shrink-0"
-        {...dragHandlers(sliderRatio)}
-      >
-        <div
-          className="absolute inset-x-0 bottom-0 rounded-full bg-feed-soft transition-[height] duration-150 ease-out"
-          style={{ height: `calc(28px + ${pct} * (100% - 28px))` }}
-        />
-        <div
-          className={cx(
-            'absolute left-1/2 -translate-x-1/2 w-12 h-12 rounded-full bg-surface shadow-float flex flex-col items-center justify-center gap-[3px] transition-[bottom] duration-150 ease-out'
-          )}
-          style={{ bottom: `calc(4px + ${pct} * (100% - 56px))` }}
-        >
-          <span className="w-4 h-[2px] rounded-full bg-faint" />
-          <span className="w-4 h-[2px] rounded-full bg-faint" />
-        </div>
+      {/* Big number */}
+      <div className="flex flex-col items-center min-w-[92px]">
+        <span className="text-[52px] leading-none font-medium tabular-nums text-ink">{value}</span>
+        <span className="text-[15px] text-muted mt-1">מ"ל</span>
       </div>
+
     </div>
   );
 };

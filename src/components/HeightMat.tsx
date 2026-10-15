@@ -21,7 +21,7 @@ const VB_H = 196;
 const ZERO_X = 326;
 const PX_PER_CM = 312 / 90;
 const RULER_Y = 166;
-const HEAD_R = 17;
+const HEAD_R = 18;
 const LOUPE_R = 34;
 const LOUPE_Y = 46;
 const LOUPE_PX_PER_CM = 17;
@@ -59,7 +59,7 @@ export const HeightMat: React.FC<HeightMatProps> = ({ value, onChange, previous,
     const v = Math.max(min, Math.min(max, Math.round(cm * 2) / 2));
     if (v !== lastStep.current) {
       lastStep.current = v;
-      haptic(3);
+      haptic(8);
     }
     if (v !== value) onChange(v);
   };
@@ -160,25 +160,38 @@ export const HeightMat: React.FC<HeightMatProps> = ({ value, onChange, previous,
 
         {/* Swaddled baby: body stretches with the length */}
         <rect
-          x={headCx + HEAD_R * 0.4}
+          x={headCx + HEAD_R * 0.7}
           y={headCy - 15}
-          width={Math.max(10, ZERO_X - 4 - (headCx + HEAD_R * 0.4))}
+          width={Math.max(10, ZERO_X - 4 - (headCx + HEAD_R * 0.7))}
           height="32"
           rx="16"
           className="fill-sleep-soft stroke-sleep"
           strokeWidth="1.2"
         />
         {[0.38, 0.66].map(f => {
-          const bx = headCx + HEAD_R * 0.4 + (ZERO_X - 4 - (headCx + HEAD_R * 0.4)) * f;
+          const bx = headCx + HEAD_R * 0.7 + (ZERO_X - 4 - (headCx + HEAD_R * 0.7)) * f;
           return <line key={f} x1={bx} x2={bx} y1={headCy - 13} y2={headCy + 15} className="stroke-sleep" strokeWidth="1" opacity="0.45" />;
         })}
-        {/* Head */}
-        <circle cx={headCx} cy={headCy} r={HEAD_R} fill="var(--c-skin)" />
-        <path d={`M ${headCx - 9} ${headCy - 3} q 3 3 6 0`} fill="none" className="stroke-ink" strokeWidth="1.3" strokeLinecap="round" opacity="0.7" />
-        <path d={`M ${headCx + 3} ${headCy - 3} q 3 3 6 0`} fill="none" className="stroke-ink" strokeWidth="1.3" strokeLinecap="round" opacity="0.7" />
-        <circle cx={headCx - 9} cy={headCy + 5} r="2.6" className="fill-feed" opacity="0.35" />
-        <circle cx={headCx + 9} cy={headCy + 5} r="2.6" className="fill-feed" opacity="0.35" />
-        <path d={`M ${hx + 2} ${headCy - 8} q -6 -4 -2 -10`} fill="none" className="stroke-ink" strokeWidth="1.3" strokeLinecap="round" opacity="0.5" />
+        {/* Head, seen from above while she lies on her back: the face is drawn upright
+            in local coordinates and rotated so the top of her head points at the crown marker */}
+        <g transform={`translate(${headCx} ${headCy}) rotate(-90)`}>
+          {/* Ears */}
+          <circle cx={-HEAD_R + 0.5} cy="2" r="3.6" fill="var(--c-skin)" />
+          <circle cx={HEAD_R - 0.5} cy="2" r="3.6" fill="var(--c-skin)" />
+          <circle r={HEAD_R} fill="var(--c-skin)" />
+          {/* Small knit cap on the crown only, so the face has room */}
+          <path d="M -16.1 -8 A 18 18 0 0 1 16.1 -8 Q 0 -4.5 -16.1 -8 Z" className="fill-feed-soft" />
+          <path d="M -16.1 -8 Q 0 -4.5 16.1 -8" fill="none" className="stroke-feed" strokeWidth="2" strokeLinecap="round" opacity="0.5" />
+          <circle cy="-18.5" r="3" className="fill-feed" opacity="0.5" />
+          {/* Sleeping eyes */}
+          <path d="M -9 0.5 q 3 3.2 6 0" fill="none" className="stroke-ink" strokeWidth="1.5" strokeLinecap="round" opacity="0.75" />
+          <path d="M 3 0.5 q 3 3.2 6 0" fill="none" className="stroke-ink" strokeWidth="1.5" strokeLinecap="round" opacity="0.75" />
+          {/* Cheeks, nose, tiny smile */}
+          <circle cx="-10.5" cy="6" r="3" className="fill-feed" opacity="0.28" />
+          <circle cx="10.5" cy="6" r="3" className="fill-feed" opacity="0.28" />
+          <circle cy="4.5" r="1.1" className="fill-ink" opacity="0.25" />
+          <path d="M -2.6 9 q 2.6 2.2 5.2 0" fill="none" className="stroke-ink" strokeWidth="1.3" strokeLinecap="round" opacity="0.55" />
+        </g>
 
         {/* Crown marker */}
         <line x1={hx} x2={hx} y1={LOUPE_Y + LOUPE_R} y2={RULER_Y} className="stroke-feed" strokeWidth="1.5" strokeDasharray="3 4" />
