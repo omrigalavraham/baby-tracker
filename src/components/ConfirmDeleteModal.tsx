@@ -1,5 +1,6 @@
-import React from 'react';
-import { Trash2, AlertCircle, X } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { Trash2 } from 'lucide-react';
+import { Button } from './ui';
 
 interface ConfirmDeleteModalProps {
   isOpen: boolean;
@@ -13,59 +14,60 @@ interface ConfirmDeleteModalProps {
 
 export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
   isOpen,
-  title = 'למחוק פעולה זו מהיומן?',
-  description = 'הרישום יימחק לצמיתות מהיומן ומכל המכשירים המחוברים.',
-  confirmText = 'כן, מחק עכשיו',
+  title = 'למחוק את הרישום?',
+  description = 'הרישום יימחק מהיומן ומכל המכשירים המחוברים.',
+  confirmText = 'מחיקה',
   cancelText = 'ביטול',
   onConfirm,
   onClose
 }) => {
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/55 backdrop-blur-xs p-4 animate-in fade-in duration-150">
-      <div 
-        className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl border border-rose-100 text-center space-y-4 animate-in slide-in-from-bottom-5 sm:zoom-in-95 duration-200"
+    <div
+      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-4 animate-fade-in"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="confirm-delete-title"
+    >
+      <div className="absolute inset-0 bg-[#2A2230]/35 backdrop-blur-[2px]" onClick={onClose} />
+      <div
+        className="relative w-full max-w-sm bg-ground rounded-[32px] p-6 shadow-float text-center space-y-5 animate-toast-in safe-bottom"
         onClick={e => e.stopPropagation()}
       >
-        {/* Warning Icon Badge */}
-        <div className="w-16 h-16 mx-auto rounded-3xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-500 shadow-sm shadow-rose-100">
-          <Trash2 className="w-8 h-8" />
+        <div className="w-12 h-12 mx-auto rounded-full bg-danger-soft text-danger flex items-center justify-center">
+          <Trash2 className="w-5 h-5" />
         </div>
 
-        {/* Text */}
-        <div className="space-y-1.5 text-center">
-          <h3 className="text-lg font-extrabold text-slate-800">
+        <div className="space-y-1.5">
+          <h3 id="confirm-delete-title" className="text-xl font-medium text-ink">
             {title}
           </h3>
-          <p className="text-xs text-slate-500 leading-relaxed max-w-xs mx-auto">
-            {description}
-          </p>
+          <p className="text-[15px] text-muted leading-relaxed">{description}</p>
         </div>
 
-        {/* Action Buttons */}
-        <div className="grid grid-cols-2 gap-2.5 pt-2">
-          {/* Cancel */}
-          <button
-            onClick={onClose}
-            className="py-3 px-4 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-all active:scale-95"
-          >
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="soft" size="md" onClick={onClose}>
             {cancelText}
-          </button>
-
-          {/* Confirm Delete */}
-          <button
+          </Button>
+          <Button
+            variant="danger"
+            size="md"
             onClick={() => {
               onConfirm();
               onClose();
             }}
-            className="py-3 px-4 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition-all active:scale-95 shadow-md shadow-rose-200 flex items-center justify-center gap-1.5"
           >
-            <Trash2 className="w-4 h-4" />
-            <span>{confirmText}</span>
-          </button>
+            {confirmText}
+          </Button>
         </div>
-
       </div>
     </div>
   );

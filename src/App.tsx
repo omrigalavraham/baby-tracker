@@ -24,10 +24,13 @@ import {
 } from './lib/supabase';
 
 // Components
-import { Navbar } from './components/Navbar';
-import { StatusCards } from './components/StatusCards';
-import { QuickActions } from './components/QuickActions';
-import { TimelineList } from './components/TimelineList';
+import { AppHeader } from './components/home/AppHeader';
+import { NowCard } from './components/home/NowCard';
+import { ReminderStrip } from './components/home/ReminderStrip';
+import { ActivityTiles } from './components/home/ActivityTiles';
+import { BottomNav, MainTab } from './components/home/BottomNav';
+import { SettingsSheet } from './components/home/SettingsSheet';
+import { HistoryTab } from './components/HistoryTab';
 import { MilestonesTab } from './components/MilestonesTab';
 import { RemindersTab } from './components/RemindersTab';
 import { FeedingModal } from './components/FeedingModal';
@@ -38,12 +41,41 @@ import { BabyProfileModal } from './components/BabyProfileModal';
 import { SyncSettingsModal } from './components/SyncSettingsModal';
 import { ExportDataModal } from './components/ExportDataModal';
 import { SplashScreen } from './components/SplashScreen';
-import { SummaryTab } from './components/SummaryTab';
-import { InsightsTab } from './components/InsightsTab';
+import { LoggedToast, ToastData } from './components/home/LoggedToast';
+import { haptic } from './components/ui';
 
-import { showAppNotification, playGentleChime } from './lib/notificationService';
+import { showAppNotification } from './lib/notificationService';
+import { localDateKey } from './lib/babyUtils';
+import { ThemeMode, loadThemeMode, saveThemeMode, useNightMode } from './lib/theme';
 import confetti from 'canvas-confetti';
-import { Activity, Sparkles, BarChart3, Lightbulb, Bell } from 'lucide-react';
+
+const stagger = (i: number) => ({ '--d': `${60 + i * 90}ms` }) as React.CSSProperties;
+
+function sleepLength(minutes: number) {
+  if (minutes < 60) return `${minutes} דק'`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  const hours = h === 1 ? 'שעה' : h === 2 ? 'שעתיים' : `${h} שעות`;
+  return m ? `${hours} ו-${m} דק'` : hours;
+}
+
+function loggedText(e: BabyEvent): string {
+  const d = e.details || {};
+  switch (e.type) {
+    case 'feeding':
+      if (d.feedType === 'bottle') return d.bottleAmountMl ? `בקבוק ${d.bottleAmountMl} מ"ל נרשם` : 'בקבוק נרשם';
+      if (d.feedType === 'solids') return 'ארוחת מוצקים נרשמה';
+      return 'הנקה נרשמה';
+    case 'sleep':
+      return d.isOngoing ? 'התחלנו לספור. שינה נעימה' : 'שינה נרשמה';
+    case 'diaper':
+      return d.diaperType === 'pee' ? 'חיתול נרשם · פיפי' : d.diaperType === 'poop' ? 'חיתול נרשם · קקי' : 'חיתול נרשם';
+    case 'weight':
+      return d.weightKg ? `משקל ${d.weightKg} ק"ג נרשם` : 'משקל נרשם';
+    default:
+      return 'נרשם';
+  }
+}
 
 export function App() {
   const [showSplash, setShowSplash] = useState(true);
@@ -53,7 +85,15 @@ export function App() {
   const [reminders, setReminders] = useState<DailyReminderItem[]>(loadLocalReminders);
   const [smartTimers, setSmartTimers] = useState<SmartTimersConfig>(loadSmartTimersConfig);
   const [isSynced, setIsSynced] = useState<boolean>(false);
-  const [mainTab, setMainTab] = useState<'tracker' | 'reminders' | 'summary' | 'insights' | 'milestones'>('tracker');
+  const [mainTab, setMainTab] = useState<MainTab>('today');
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [themeMode, setThemeMode] = useState<ThemeMode>(loadThemeMode);
+  const isNight = useNightMode(themeMode);
+
+  const handleChangeTheme = (mode: ThemeMode) => {
+    setThemeMode(mode);
+    saveThemeMode(mode);
+  };
 
   // PWA Install Prompt State
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -66,6 +106,17 @@ export function App() {
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [syncModalOpen, setSyncModalOpen] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
+
+  // Splash dissolves into the app; the app content rises in underneath
+  const [appReady, setAppReady] = useState(false);
+
+  // Gentle confirmation after logging, with undo
+  const [toast, setToast] = useState<ToastData | null>(null);
+  const clearToast = useCallback(() => setToast(null), []);
+  const showToast = (t: Omit<ToastData, 'key'>) => {
+    haptic();
+    setToast({ ...t, key: Date.now() });
+  };
 
   // Catch PWA beforeinstallprompt for Galaxy / Chrome install
   useEffect(() => {
@@ -194,6 +245,9 @@ export function App() {
     if (isSupabaseConfigured()) {
       addEventToSupabase(newEvent);
     }
+
+    haptic();
+    setToast({ key: Date.now(), type: newEvent.type, text: loggedText(newEvent), undoId: newEvent.id });
   }, [profile.id]);
 
   // Delete event helper
@@ -208,23 +262,6 @@ export function App() {
       deleteEventFromSupabase(id);
     }
   }, []);
-
-  // Quick 1-tap Diaper Logging
-  const handleQuickDiaperPee = () => {
-    handleSaveEvent({
-      type: 'diaper',
-      started_at: new Date().toISOString(),
-      details: { diaperType: 'pee' }
-    });
-  };
-
-  const handleQuickDiaperPoop = (color?: string) => {
-    handleSaveEvent({
-      type: 'diaper',
-      started_at: new Date().toISOString(),
-      details: { diaperType: 'poop', poopColor: color }
-    });
-  };
 
   // Active ongoing sleep check
   const activeSleep = events.find(e => e.type === 'sleep' && e.details?.isOngoing);
@@ -255,6 +292,7 @@ export function App() {
       if (isSupabaseConfigured()) {
         addEventToSupabase(updatedSleep);
       }
+      showToast({ type: 'wake', text: `התעוררה אחרי ${sleepLength(durationMinutes)}` });
     } else {
       // Start sleep!
       handleSaveEvent({
@@ -282,6 +320,7 @@ export function App() {
       saveLocalEvents(updated);
       return updated;
     });
+    showToast({ type: 'wake', text: `התעוררה אחרי ${sleepLength(durationMinutes)}` });
   };
 
   // Milestones toggle
@@ -326,7 +365,7 @@ export function App() {
     saveSmartTimersConfig(updated);
   };
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = localDateKey();
   const pendingDailyReminders = reminders.filter(r => r.enabled && r.lastCompletedDate !== todayStr);
 
   const handleToggleReminderComplete = (item: DailyReminderItem) => {
@@ -334,11 +373,15 @@ export function App() {
     const newDate = isDone ? undefined : todayStr;
     if (!isDone) {
       confetti({
-        particleCount: 40,
-        spread: 60,
-        origin: { y: 0.6 }
+        particleCount: 24,
+        spread: 50,
+        startVelocity: 22,
+        gravity: 0.6,
+        scalar: 0.8,
+        colors: ['#F8E4E1', '#ECE6F5', '#E3EEE6', '#F4EBDD', '#B9A9DA'],
+        origin: { y: 0.5 }
       });
-      playGentleChime();
+      haptic(14);
     }
     const updated = reminders.map(r => r.id === item.id ? { ...r, lastCompletedDate: newDate } : r);
     handleUpdateReminders(updated);
@@ -353,7 +396,7 @@ export function App() {
       const currentHours = String(now.getHours()).padStart(2, '0');
       const currentMins = String(now.getMinutes()).padStart(2, '0');
       const currentTimeStr = `${currentHours}:${currentMins}`;
-      const currentDay = now.toISOString().slice(0, 10);
+      const currentDay = localDateKey(now);
 
       // 1. Check daily reminders scheduled for now
       reminders.forEach(rem => {
@@ -416,96 +459,65 @@ export function App() {
   }, [reminders, smartTimers, events, activeSleep]);
 
   return (
-    <div className="min-h-screen bg-rose-50/40 pb-24 text-slate-800">
-      
-      {/* Top Navbar */}
-      <Navbar
-        profile={profile}
-        isSynced={isSynced}
-        isSleeping={!!activeSleep}
-        onOpenProfile={() => setProfileModalOpen(true)}
-        onOpenSync={() => setSyncModalOpen(true)}
-        onOpenExport={() => setExportModalOpen(true)}
-        onReplaySplash={() => setShowSplash(true)}
-        installPrompt={deferredPrompt}
-        onInstallApp={handleInstallApp}
-      />
-
-      {/* Animated Opening Splash Screen */}
+    <div className="min-h-dvh bg-ground text-ink">
       {showSplash && (
-        <SplashScreen
-          babyName={profile.name}
-          onFinish={() => setShowSplash(false)}
-        />
+        <SplashScreen babyName={profile.name} onReveal={() => setAppReady(true)} onFinish={() => setShowSplash(false)} />
       )}
 
-      {/* Main View: Tracker, Reminders, Summary, Insights, or Milestones */}
-      {mainTab === 'tracker' && (
-        <main className="space-y-3 pt-2">
-
-          {/* Gentle Daily Reminder Banner in Tracker View */}
-          {pendingDailyReminders.length > 0 && (
-            <div className="bg-gradient-to-r from-amber-50 to-rose-50 border border-rose-200/70 rounded-2xl p-3 flex items-center justify-between gap-2 shadow-2xs">
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                <span className="text-xl shrink-0">{pendingDailyReminders[0].icon}</span>
-                <div className="truncate flex-1 min-w-0">
-                  <p className="text-xs font-bold text-slate-800 truncate">
-                    תזכורת: {pendingDailyReminders[0].title}
-                  </p>
-                  <p className="text-[10px] text-slate-500 truncate">
-                    {pendingDailyReminders.length > 1 ? `ועוד ${pendingDailyReminders.length - 1} משימות להיום` : 'טרם סומן כבוצע להיום'}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  onClick={() => handleToggleReminderComplete(pendingDailyReminders[0])}
-                  className="px-3 py-1.5 bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 text-white rounded-xl text-xs font-bold active:scale-95 transition-all shadow-xs"
-                >
-                  סמן כבוצע ✅
-                </button>
-                <button
-                  onClick={() => setMainTab('reminders')}
-                  className="text-[10px] text-rose-600 font-bold px-2 py-1.5 rounded-xl hover:bg-rose-100/60"
-                >
-                  הכל ➔
-                </button>
-              </div>
+      {appReady && (
+      <main key={mainTab} className="max-w-md mx-auto px-[22px] pt-8 pb-32 safe-top">
+        {mainTab === 'today' && (
+          <div className="flex flex-col gap-5">
+            <div className="rise-in" style={stagger(0)}>
+              <AppHeader
+                profile={profile}
+                isSleeping={!!activeSleep}
+                isNight={isNight}
+                onOpenSettings={() => setSettingsOpen(true)}
+                onOpenProfile={() => setProfileModalOpen(true)}
+              />
             </div>
-          )}
+            <div className="rise-in" style={stagger(1)}>
+              <NowCard events={events} activeSleep={activeSleep} smartTimers={smartTimers} onToggleSleep={handleToggleSleepQuick} />
+            </div>
+            {!isNight && pendingDailyReminders.length > 0 && (
+              <div className="rise-in" style={stagger(2)}>
+                <ReminderStrip
+                  pending={pendingDailyReminders}
+                  onComplete={handleToggleReminderComplete}
+                  onOpenAll={() => setMainTab('reminders')}
+                />
+              </div>
+            )}
+            <div className="rise-in" style={stagger(3)}>
+              <ActivityTiles
+                events={events}
+                profile={profile}
+                isSleeping={!!activeSleep}
+                justLogged={toast && toast.type !== 'wake' ? { type: toast.type, key: toast.key } : null}
+                onOpenFeeding={() => setFeedingModalOpen(true)}
+                onOpenDiaper={() => setDiaperModalOpen(true)}
+                onOpenSleep={() => setSleepModalOpen(true)}
+                onOpenWeight={() => setWeightModalOpen(true)}
+              />
+            </div>
+          </div>
+        )}
 
-          {/* Quick status cards (Last feeding, last diaper, sleep) */}
-          <StatusCards
+        {mainTab === 'history' && (
+          <div className="animate-view-in">
+          <HistoryTab
             events={events}
             profile={profile}
-            onOpenFeeding={() => setFeedingModalOpen(true)}
-            onOpenDiaper={() => setDiaperModalOpen(true)}
-            onOpenSleep={() => setSleepModalOpen(true)}
-            onOpenWeight={() => setWeightModalOpen(true)}
-          />
-
-          {/* Quick 1-tap Actions Bar */}
-          <QuickActions
-            onOpenFeeding={() => setFeedingModalOpen(true)}
-            onQuickDiaperPee={handleQuickDiaperPee}
-            onQuickDiaperPoopWithColor={handleQuickDiaperPoop}
-            onOpenDiaperFull={() => setDiaperModalOpen(true)}
-            onOpenSleep={() => setSleepModalOpen(true)}
-            onOpenWeight={() => setWeightModalOpen(true)}
-            isSleeping={!!activeSleep}
-            onToggleSleepQuick={handleToggleSleepQuick}
-          />
-
-          {/* Timeline Feed */}
-          <TimelineList
-            events={events}
             onDeleteEvent={handleDeleteEvent}
+            onOpenFeeding={() => setFeedingModalOpen(true)}
+            onOpenSleep={() => setSleepModalOpen(true)}
           />
-        </main>
-      )}
+          </div>
+        )}
 
-      {mainTab === 'reminders' && (
-        <main className="pt-2">
+        {mainTab === 'reminders' && (
+          <div className="animate-view-in">
           <RemindersTab
             profile={profile}
             events={events}
@@ -515,116 +527,39 @@ export function App() {
             onUpdateReminders={handleUpdateReminders}
             onUpdateSmartTimers={handleUpdateSmartTimers}
           />
-        </main>
-      )}
+          </div>
+        )}
 
-      {mainTab === 'summary' && (
-        <main className="pt-2">
-          <SummaryTab
-            events={events}
-            profile={profile}
-          />
-        </main>
-      )}
-
-      {mainTab === 'insights' && (
-        <main className="pt-2">
-          <InsightsTab
-            events={events}
-            profile={profile}
-            onOpenFeeding={() => setFeedingModalOpen(true)}
-            onOpenSleep={() => setSleepModalOpen(true)}
-          />
-        </main>
-      )}
-
-      {mainTab === 'milestones' && (
-        <main className="pt-2">
+        {mainTab === 'growth' && (
+          <div className="animate-view-in">
           <MilestonesTab
             profile={profile}
             completedMilestones={completedMilestones}
             onToggleMilestone={handleToggleMilestone}
           />
-        </main>
+          </div>
+        )}
+      </main>
       )}
 
-      {/* Bottom Sticky Tab Navigation - 5 Smart Tabs */}
-      <nav className="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-rose-100 safe-bottom z-30 shadow-lg">
-        <div className="max-w-md mx-auto grid grid-cols-5 px-1 py-1.5 gap-0.5">
-          {/* Tab 1: Tracker */}
-          <button
-            onClick={() => setMainTab('tracker')}
-            className={`flex flex-col items-center justify-center py-1.5 rounded-xl transition-all ${
-              mainTab === 'tracker'
-                ? 'text-rose-600 font-bold bg-rose-50/80 shadow-2xs'
-                : 'text-slate-400 font-medium hover:text-slate-600'
-            }`}
-          >
-            <Activity className="w-4 h-4 mb-0.5" />
-            <span className="text-[10px] sm:text-[11px]">יומן</span>
-          </button>
+      <LoggedToast toast={toast} onUndo={handleDeleteEvent} onDone={clearToast} />
 
-          {/* Tab 2: Reminders & Routine */}
-          <button
-            onClick={() => setMainTab('reminders')}
-            className={`flex flex-col items-center justify-center py-1.5 rounded-xl transition-all relative ${
-              mainTab === 'reminders'
-                ? 'text-rose-600 font-bold bg-rose-50/80 shadow-2xs'
-                : 'text-slate-400 font-medium hover:text-slate-600'
-            }`}
-          >
-            <Bell className="w-4 h-4 mb-0.5" />
-            <span className="text-[10px] sm:text-[11px]">תזכורות</span>
-            {pendingDailyReminders.length > 0 && (
-              <span className="absolute top-1 right-2.5 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center shadow-2xs">
-                {pendingDailyReminders.length}
-              </span>
-            )}
-          </button>
+      {appReady && <BottomNav value={mainTab} onChange={setMainTab} pendingReminders={pendingDailyReminders.length} />}
 
-          {/* Tab 3: Comprehensive Summary */}
-          <button
-            onClick={() => setMainTab('summary')}
-            className={`flex flex-col items-center justify-center py-1.5 rounded-xl transition-all ${
-              mainTab === 'summary'
-                ? 'text-indigo-600 font-bold bg-indigo-50/80 shadow-2xs'
-                : 'text-slate-400 font-medium hover:text-slate-600'
-            }`}
-          >
-            <BarChart3 className="w-4 h-4 mb-0.5" />
-            <span className="text-[10px] sm:text-[11px]">מעקב</span>
-          </button>
+      <SettingsSheet
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        isSynced={isSynced}
+        themeMode={themeMode}
+        onChangeTheme={handleChangeTheme}
+        onOpenProfile={() => setProfileModalOpen(true)}
+        onOpenSync={() => setSyncModalOpen(true)}
+        onOpenExport={() => setExportModalOpen(true)}
+        onReplaySplash={() => setShowSplash(true)}
+        canInstall={!!deferredPrompt}
+        onInstallApp={handleInstallApp}
+      />
 
-          {/* Tab 4: Smart Insights */}
-          <button
-            onClick={() => setMainTab('insights')}
-            className={`flex flex-col items-center justify-center py-1.5 rounded-xl transition-all relative ${
-              mainTab === 'insights'
-                ? 'text-amber-600 font-bold bg-amber-50/80 shadow-2xs'
-                : 'text-slate-400 font-medium hover:text-slate-600'
-            }`}
-          >
-            <Lightbulb className="w-4 h-4 mb-0.5" />
-            <span className="text-[10px] sm:text-[11px]">תובנות</span>
-            <span className="absolute top-1 right-2.5 w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-          </button>
-
-          {/* Tab 5: Milestones & Activities */}
-          <button
-            onClick={() => setMainTab('milestones')}
-            className={`flex flex-col items-center justify-center py-1.5 rounded-xl transition-all relative ${
-              mainTab === 'milestones'
-                ? 'text-pink-600 font-bold bg-pink-50/80 shadow-2xs'
-                : 'text-slate-400 font-medium hover:text-slate-600'
-            }`}
-          >
-            <Sparkles className="w-4 h-4 mb-0.5" />
-            <span className="text-[10px] sm:text-[11px]">התפתחות</span>
-          </button>
-        </div>
-      </nav>
-
-      {/* Modals */}
       <FeedingModal
         isOpen={feedingModalOpen}
         onClose={() => setFeedingModalOpen(false)}
@@ -674,7 +609,6 @@ export function App() {
         events={events}
         profile={profile}
       />
-
     </div>
   );
 }

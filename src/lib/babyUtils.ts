@@ -195,8 +195,16 @@ export function exportEventsToCSV(events: BabyEvent[], profile: BabyProfile): vo
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.setAttribute('href', url);
-  link.setAttribute('download', `יומן_מעקב_${profile.name || 'תינוקת'}_${new Date().toISOString().slice(0, 10)}.csv`);
+  link.setAttribute('download', `יומן_מעקב_${profile.name || 'תינוקת'}_${localDateKey()}.csv`);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+}
+
+/** Local calendar date as 'YYYY-MM-DD' (toISOString() is UTC and flips the day late in Israel). */
+export function localDateKey(date: Date = new Date()): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }

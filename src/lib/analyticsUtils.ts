@@ -1,5 +1,5 @@
 import { BabyEvent, BabyProfile } from '../types';
-import { calculateAge } from './babyUtils';
+import { calculateAge, localDateKey } from './babyUtils';
 
 export interface DayStats {
   dateKey: string;
@@ -63,7 +63,7 @@ export function filterEventsByPeriod(events: BabyEvent[], period: 'today' | 'yes
  */
 export function computeStats(events: BabyEvent[]): DayStats {
   const stats: DayStats = {
-    dateKey: new Date().toISOString().slice(0, 10),
+    dateKey: localDateKey(),
     totalFeedings: 0,
     breastFeedingsCount: 0,
     bottleFeedingsCount: 0,

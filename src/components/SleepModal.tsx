@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, Check, Moon, Play, Square, Clock, Sparkles } from 'lucide-react';
+import { Check, Moon, Play, Sun } from 'lucide-react';
 import { BabyEvent } from '../types';
 import { formatLiveDuration, formatTime } from '../lib/babyUtils';
+import { Sheet, Button, Field, Segmented, fieldClass } from './ui';
 
 interface SleepModalProps {
   isOpen: boolean;
@@ -10,6 +11,8 @@ interface SleepModalProps {
   activeSleepEvent?: BabyEvent;
   onEndSleepEvent: (eventId: string, endedAt: string, durationMinutes: number) => void;
 }
+
+const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 
 export const SleepModal: React.FC<SleepModalProps> = ({
   isOpen,
@@ -21,27 +24,26 @@ export const SleepModal: React.FC<SleepModalProps> = ({
   const [mode, setMode] = useState<'live' | 'manual'>('live');
 
   // Manual times
-  const [startTime, setStartTime] = useState<string>(() => {
-    const d = new Date(Date.now() - 60 * 60000);
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  });
-  const [endTime, setEndTime] = useState<string>(() => {
-    const d = new Date();
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  });
+  const [startTime, setStartTime] = useState<string>(() => hhmm(new Date(Date.now() - 60 * 60000)));
+  const [endTime, setEndTime] = useState<string>(() => hhmm(new Date()));
   const [notes, setNotes] = useState('');
 
   const isSleepingNow = !!activeSleepEvent?.details?.isOngoing;
 
-  // Live ticking counter
+  // Refresh manual defaults each time the sheet opens
+  useEffect(() => {
+    if (!isOpen) return;
+    setStartTime(hhmm(new Date(Date.now() - 60 * 60000)));
+    setEndTime(hhmm(new Date()));
+  }, [isOpen]);
+
+  // Calm live counter (minutes precision, no need to re-render every second)
   const [, setTick] = useState(0);
   useEffect(() => {
-    if (!isSleepingNow) return;
-    const interval = setInterval(() => setTick(t => t + 1), 1000);
+    if (!isSleepingNow || !isOpen) return;
+    const interval = setInterval(() => setTick(t => t + 1), 10000);
     return () => clearInterval(interval);
-  }, [isSleepingNow]);
-
-  if (!isOpen) return null;
+  }, [isSleepingNow, isOpen]);
 
   const handleStartLiveSleep = () => {
     onSaveEvent({
@@ -61,7 +63,7 @@ export const SleepModal: React.FC<SleepModalProps> = ({
     const start = new Date(activeSleepEvent.started_at).getTime();
     const now = Date.now();
     const durationMinutes = Math.max(1, Math.round((now - start) / 60000));
-    
+
     onEndSleepEvent(activeSleepEvent.id, new Date().toISOString(), durationMinutes);
     onClose();
   };
@@ -96,172 +98,92 @@ export const SleepModal: React.FC<SleepModalProps> = ({
     onClose();
   };
 
+  const live = isSleepingNow && activeSleepEvent ? formatLiveDuration(activeSleepEvent.started_at) : null;
+
+  const footer =
+    mode === 'manual' ? (
+      <Button block tone="sleep" onClick={handleSaveManualSleep}>
+        <Check />
+        <span>שמירה</span>
+      </Button>
+    ) : isSleepingNow ? (
+      <Button block tone="sleep" onClick={handleWakeUp}>
+        <Sun />
+        <span>התעוררה</span>
+      </Button>
+    ) : (
+      <Button block tone="sleep" onClick={handleStartLiveSleep}>
+        <Play />
+        <span>להתחיל טיימר שינה</span>
+      </Button>
+    );
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-xs p-0 sm:p-4">
-      <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden border border-indigo-100 max-h-[92vh] flex flex-col animate-in slide-in-from-bottom-6 duration-200">
-        
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-indigo-50/60">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center">
-              <Moon className="w-4 h-4" />
+    <Sheet open={isOpen} onClose={onClose} title="שינה" icon={<Moon />} tone="sleep" footer={footer}>
+      <Segmented
+        label="אופן הרישום"
+        value={mode}
+        onChange={setMode}
+        options={[
+          { value: 'live', label: 'עכשיו' },
+          { value: 'manual', label: 'הוספה ידנית' }
+        ]}
+      />
+
+      {mode === 'live' ? (
+        isSleepingNow && activeSleepEvent && live ? (
+          <div className="space-y-3">
+            <div className="bg-sleep-soft rounded-[28px] px-6 py-8 flex flex-col items-center text-center gap-3">
+              <Moon className="w-7 h-7 text-sleep" aria-hidden="true" />
+              <span className="text-[15px] text-sleep-ink">ישנה</span>
+              <span className="text-[40px] leading-none font-medium text-sleep-ink tabular-nums" dir="ltr">
+                {live.hours}:{String(live.minutes).padStart(2, '0')}
+              </span>
+              <span className="text-[13px] text-sleep-ink">נרדמה ב-{formatTime(activeSleepEvent.started_at)}</span>
             </div>
-            <h2 className="font-bold text-slate-800 text-lg">מעקב שינה</h2>
+            <p className="text-[13px] text-muted text-center px-2">
+              אפשר לסגור את החלון, הזמן ממשיך להימדד.
+            </p>
           </div>
-          <button 
-            onClick={onClose}
-            className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Tab switch */}
-        <div className="grid grid-cols-2 p-2 bg-slate-100/80 gap-1 text-xs font-semibold">
-          <button
-            onClick={() => setMode('live')}
-            className={`py-2 rounded-xl transition-all ${
-              mode === 'live'
-                ? 'bg-white text-indigo-600 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            🌙 שינה חיה / תנומה עכשיו
-          </button>
-          <button
-            onClick={() => setMode('manual')}
-            className={`py-2 rounded-xl transition-all ${
-              mode === 'manual'
-                ? 'bg-white text-indigo-600 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            ✍️ הוספת שעות ידנית
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="p-5 space-y-4 text-right overflow-y-auto flex-1">
-          {mode === 'live' ? (
-            <div className="text-center py-2 space-y-4">
-              
-              {isSleepingNow ? (
-                <>
-                  <div className="w-16 h-16 mx-auto rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-3xl shadow-inner animate-pulse">
-                    😴
-                  </div>
-
-                  <div className="space-y-2">
-                    <span className="text-xs bg-indigo-600 text-white px-3 py-1 rounded-full font-bold inline-flex items-center gap-1.5 shadow-xs">
-                      <span className="w-2 h-2 rounded-full bg-white animate-ping" />
-                      התינוקת ישנה כעת...
-                    </span>
-
-                    {/* LIVE TICKING STOPWATCH */}
-                    <div className="pt-2">
-                      <div className="text-4xl font-black font-mono tracking-wider text-indigo-950 bg-gradient-to-b from-indigo-50 to-indigo-100/70 py-3.5 px-6 rounded-2xl border border-indigo-200 inline-block shadow-inner">
-                        {formatLiveDuration(activeSleepEvent.started_at).formattedClock}
-                      </div>
-                      <p className="text-sm font-bold text-indigo-700 mt-2">
-                        ישנה כבר {formatLiveDuration(activeSleepEvent.started_at).formattedText}
-                      </p>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        החלה ב-{formatTime(activeSleepEvent.started_at)}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="p-3 bg-indigo-50/60 rounded-2xl border border-indigo-100 text-xs text-indigo-800 text-right">
-                    💡 <strong>אפשר לצאת מהחלון חופשי:</strong> הזמן ממשיך להימדד ברקע ובטלפון של בן/בת הזוג. כשתתעורר לחצו כאן כדי לשמור.
-                  </div>
-
-                  <button
-                    onClick={handleWakeUp}
-                    className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-2xl shadow-lg shadow-amber-200 transition-all flex items-center justify-center gap-2 text-base active:scale-95"
-                  >
-                    <Square className="w-5 h-5 fill-current" />
-                    <span>התעוררה! סיים ושמור שינה</span>
-                  </button>
-                </>
-              ) : (
-                <>
-                  <div className="w-20 h-20 mx-auto rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-3xl shadow-inner">
-                    🌙
-                  </div>
-
-                  <div className="space-y-1">
-                    <h3 className="font-bold text-slate-800 text-base">התינוקת נרדמת עכשיו?</h3>
-                    <p className="text-xs text-slate-500 max-w-xs mx-auto">
-                      לחצו כאן להתחלת הטיימר. תוכלו לראות בכל רגע כמה זמן היא כבר ישנה.
-                    </p>
-                  </div>
-
-                  <div>
-                    <input
-                      type="text"
-                      placeholder="הערה (למשל: נרדמה בעגלה, במיטה שלה...)"
-                      value={notes}
-                      onChange={e => setNotes(e.target.value)}
-                      className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-400 text-right mb-3"
-                    />
-                  </div>
-
-                  <button
-                    onClick={handleStartLiveSleep}
-                    className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow-md shadow-indigo-200 transition-all flex items-center justify-center gap-2 active:scale-95"
-                  >
-                    <Play className="w-5 h-5 fill-current" />
-                    <span>התחל מעקב שינה עכשיו</span>
-                  </button>
-                </>
-              )}
+        ) : (
+          <div className="space-y-5">
+            <div className="flex flex-col items-center text-center gap-2 pt-2">
+              <p className="text-[15px] text-ink">נרדמה עכשיו?</p>
+              <p className="text-[13px] text-muted">מפעילים טיימר ורואים בכל רגע כמה זמן היא ישנה.</p>
             </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">נרדמה ב:</label>
-                  <input
-                    type="time"
-                    value={startTime}
-                    onChange={e => setStartTime(e.target.value)}
-                    className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">התעוררה ב:</label>
-                  <input
-                    type="time"
-                    value={endTime}
-                    onChange={e => setEndTime(e.target.value)}
-                    className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                  />
-                </div>
-              </div>
+            <Field label="הערה (לא חובה)">
+              <input
+                type="text"
+                placeholder="בעגלה, במיטה שלה..."
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                className={fieldClass}
+              />
+            </Field>
+          </div>
+        )
+      ) : (
+        <div className="space-y-5">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="נרדמה ב">
+              <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className={fieldClass} />
+            </Field>
+            <Field label="התעוררה ב">
+              <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className={fieldClass} />
+            </Field>
+          </div>
 
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">הערות:</label>
-                <input
-                  type="text"
-                  placeholder="הערות לשינה (איפה ישנה, האם ישנה רצוף...)"
-                  value={notes}
-                  onChange={e => setNotes(e.target.value)}
-                  className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                />
-              </div>
-
-              <button
-                onClick={handleSaveManualSleep}
-                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl shadow-md shadow-indigo-200 transition-all flex items-center justify-center gap-2 mt-4"
-              >
-                <Check className="w-5 h-5" />
-                <span>שמור שינה ידנית</span>
-              </button>
-            </div>
-          )}
+          <Field label="הערה (לא חובה)">
+            <input
+              type="text"
+              placeholder="איפה ישנה, האם ברצף..."
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              className={fieldClass}
+            />
+          </Field>
         </div>
-
-      </div>
-    </div>
+      )}
+    </Sheet>
   );
 };

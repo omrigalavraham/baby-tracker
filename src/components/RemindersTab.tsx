@@ -1,31 +1,14 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { BabyEvent, BabyProfile, DailyReminderItem, SmartTimersConfig } from '../types';
-import { 
-  Bell, 
-  BellRing, 
-  BellOff, 
-  Check, 
-  CheckCircle2, 
-  Clock, 
-  Plus, 
-  Trash2, 
-  Sparkles, 
-  Volume2, 
-  AlertCircle,
-  X,
-  Timer,
-  ChevronDown,
-  RotateCcw
-} from 'lucide-react';
-import confetti from 'canvas-confetti';
-import { 
-  isNotificationSupported, 
-  getNotificationPermission, 
-  requestNotificationPermission, 
-  showAppNotification, 
-  playGentleChime 
+import { Bath, Bell, BellOff, Droplet, Heart, Pill, Plus, Stethoscope, Sun, Trash2 } from 'lucide-react';
+import {
+  isNotificationSupported,
+  getNotificationPermission,
+  requestNotificationPermission,
+  showAppNotification,
 } from '../lib/notificationService';
-import { ConfirmDeleteModal } from './ConfirmDeleteModal';
+import { Button, Card, CheckCircle, Choice, Field, IconBadge, SectionTitle, Sheet, Toggle, Tone, cx, fieldClass } from './ui';
+import { localDateKey } from '../lib/babyUtils';
 
 interface RemindersTabProps {
   profile: BabyProfile;
@@ -37,6 +20,50 @@ interface RemindersTabProps {
   onUpdateSmartTimers: (timers: SmartTimersConfig) => void;
 }
 
+const ICON_PROPS = { strokeWidth: 1.75 };
+
+const CATEGORY_LOOK: Record<DailyReminderItem['category'], { tone: Tone; Icon: React.FC<{ strokeWidth?: number }> }> = {
+  vitamin: { tone: 'weight', Icon: Sun },
+  iron: { tone: 'feed', Icon: Droplet },
+  medication: { tone: 'primary', Icon: Pill },
+  bath: { tone: 'sleep', Icon: Bath },
+  appointment: { tone: 'diaper', Icon: Stethoscope },
+  custom: { tone: 'primary', Icon: Heart },
+};
+
+type TimerKey = 'feedingIntervalMinutes' | 'wakeWindowMinutes' | 'stopwatchAlertMinutes';
+
+const TIMER_OPTIONS: Record<TimerKey, { defaultValue: number; options: number[] }> = {
+  feedingIntervalMinutes: { defaultValue: 180, options: [150, 180, 210] },
+  wakeWindowMinutes: { defaultValue: 75, options: [60, 75, 90] },
+  stopwatchAlertMinutes: { defaultValue: 60, options: [45, 60, 90] },
+};
+
+/** Warm, human duration: 180 -> "3 שעות", 150 -> "שעתיים וחצי", 75 -> "75 דקות" */
+function formatDuration(minutes: number): string {
+  if (minutes < 60 || minutes % 30 !== 0) return `${minutes} דקות`;
+  const hours = Math.floor(minutes / 60);
+  const half = minutes % 60 === 30;
+  const base = hours === 1 ? 'שעה' : hours === 2 ? 'שעתיים' : `${hours} שעות`;
+  return half ? `${base} וחצי` : base;
+}
+
+function formatShortDuration(minutes: number): string {
+  if (minutes < 60 || minutes % 30 !== 0) return `${minutes} דק׳`;
+  return `${minutes / 60} שע׳`;
+}
+
+function formatClock(date: Date): string {
+  return date.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+}
+
+function todayKey(): string {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
 export const RemindersTab: React.FC<RemindersTabProps> = ({
   profile,
   events,
@@ -44,568 +71,451 @@ export const RemindersTab: React.FC<RemindersTabProps> = ({
   reminders,
   smartTimers,
   onUpdateReminders,
-  onUpdateSmartTimers
+  onUpdateSmartTimers,
 }) => {
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(getNotificationPermission());
-  const [isAddingNew, setIsAddingNew] = useState(false);
+  const supported = isNotificationSupported();
+
+  // Add sheet
+  const [isAdding, setIsAdding] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newTime, setNewTime] = useState('12:00');
-  const [newIcon, setNewIcon] = useState('⭐️');
   const [newDesc, setNewDesc] = useState('');
-  const [itemToDelete, setItemToDelete] = useState<DailyReminderItem | null>(null);
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  // Edit sheet
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editTime, setEditTime] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const editingItem = reminders.find(r => r.id === editingId) || null;
 
-  // Calculate today's completion progress
+  // Gentle tick so the timer descriptions stay roughly current
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setTick(t => t + 1), 60000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  // Kept consistent with the existing data format (stored lastCompletedDate values)
+  const todayStr = localDateKey();
+  void todayKey;
+
   const activeReminders = reminders.filter(r => r.enabled);
   const completedCount = activeReminders.filter(r => r.lastCompletedDate === todayStr).length;
-  const progressPercent = activeReminders.length > 0 
-    ? Math.round((completedCount / activeReminders.length) * 100) 
-    : 0;
 
-  // Handle request permission
+  const sortedReminders = useMemo(
+    () =>
+      [...reminders].sort((a, b) => {
+        if (a.enabled !== b.enabled) return a.enabled ? -1 : 1;
+        return a.time.localeCompare(b.time);
+      }),
+    [reminders]
+  );
+
+  const babyName = profile.name || 'הקטנה';
+
+  // ---- Notifications ----
   const handleEnableNotifications = async () => {
     const granted = await requestNotificationPermission();
-    setNotificationPermission(granted ? 'granted' : 'denied');
+    setNotificationPermission(granted ? 'granted' : getNotificationPermission());
     if (granted) {
-      showAppNotification('בייבי יומן 👶 | ההתראות הופעלו בהצלחה!', {
-        body: 'מעכשיו תקבלי תזכורות בזמן אמת לוויטמינים, האכלות ושינה.',
+      showAppNotification('ההתראות פועלות', {
+        body: `מעכשיו נזכיר לך בשקט על הדברים החשובים של ${babyName}.`,
         tag: 'welcome-test',
         playSound: true,
-        cooldownMinutes: 0
+        cooldownMinutes: 0,
       });
     }
   };
 
   const handleTestNotification = () => {
-    showAppNotification('בדיקת התראה 🔔 | בייבי יומן', {
-      body: 'התראות פועלות מעולה במכשיר זה! שתהיה צמיחה מהנה 👶✨',
+    showAppNotification('בדיקת התראה', {
+      body: 'הכל עובד. ככה ייראו התזכורות שלך.',
       tag: 'test-' + Date.now(),
       playSound: true,
-      cooldownMinutes: 0
+      cooldownMinutes: 0,
     });
   };
 
-  // Toggle completion
+  // ---- Reminder actions ----
   const handleToggleComplete = (item: DailyReminderItem) => {
     const isDone = item.lastCompletedDate === todayStr;
-    const newDate = isDone ? undefined : todayStr;
-
-    if (!isDone) {
-      // Trigger celebration
-      confetti({
-        particleCount: 40,
-        spread: 60,
-        origin: { y: 0.7 }
-      });
-      playGentleChime();
-    }
-
-    const updated = reminders.map(r => 
-      r.id === item.id ? { ...r, lastCompletedDate: newDate } : r
-    );
-    onUpdateReminders(updated);
+    onUpdateReminders(reminders.map(r => (r.id === item.id ? { ...r, lastCompletedDate: isDone ? undefined : todayStr } : r)));
   };
 
-  // Toggle active/inactive
-  const handleToggleEnabled = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const updated = reminders.map(r => 
-      r.id === id ? { ...r, enabled: !r.enabled } : r
-    );
-    onUpdateReminders(updated);
+  const openEdit = (item: DailyReminderItem) => {
+    setEditingId(item.id);
+    setEditTitle(item.title);
+    setEditTime(item.time);
+    setEditDesc(item.description || '');
+    setConfirmingDelete(false);
   };
 
-  // Add new reminder
-  const handleAddNewReminder = (e: React.FormEvent) => {
+  const closeEdit = () => {
+    setEditingId(null);
+    setConfirmingDelete(false);
+  };
+
+  const saveEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItem || !editTitle.trim()) return;
+    onUpdateReminders(
+      reminders.map(r =>
+        r.id === editingItem.id
+          ? { ...r, title: editTitle.trim(), time: editTime || r.time, description: editDesc.trim() || undefined }
+          : r
+      )
+    );
+    closeEdit();
+  };
+
+  const setEnabled = (id: string, enabled: boolean) => {
+    onUpdateReminders(reminders.map(r => (r.id === id ? { ...r, enabled } : r)));
+  };
+
+  const deleteEditing = () => {
+    if (!editingItem) return;
+    onUpdateReminders(reminders.filter(r => r.id !== editingItem.id));
+    closeEdit();
+  };
+
+  const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
-
     const newItem: DailyReminderItem = {
       id: 'rem_' + Date.now(),
       title: newTitle.trim(),
       description: newDesc.trim() || undefined,
       category: 'custom',
-      icon: newIcon,
+      icon: '⭐️', // kept for data compatibility; the list renders a lucide icon by category
       time: newTime || '12:00',
-      enabled: true
+      enabled: true,
     };
-
     onUpdateReminders([...reminders, newItem]);
     setNewTitle('');
     setNewDesc('');
-    setIsAddingNew(false);
+    setNewTime('12:00');
+    setIsAdding(false);
   };
 
-  // Delete reminder
-  const confirmDelete = () => {
-    if (!itemToDelete) return;
-    onUpdateReminders(reminders.filter(r => r.id !== itemToDelete.id));
-    setItemToDelete(null);
-  };
+  // ---- Smart timers ----
+  const setTimer = (key: TimerKey, value: number) => onUpdateSmartTimers({ ...smartTimers, [key]: value });
 
-  // Smart Feeding countdown
   const lastFeeding = events.find(e => e.type === 'feeding');
-  let feedingStatusText = '';
-  let feedingDueInMinutes: number | null = null;
-  if (lastFeeding && smartTimers.feedingIntervalMinutes > 0) {
-    const elapsedMinutes = Math.floor((Date.now() - new Date(lastFeeding.started_at).getTime()) / 60000);
-    const diff = smartTimers.feedingIntervalMinutes - elapsedMinutes;
-    feedingDueInMinutes = diff;
-
-    if (diff > 0) {
-      const hours = Math.floor(diff / 60);
-      const mins = diff % 60;
-      feedingStatusText = hours > 0 ? `בעוד ${hours} שע' ו-${mins} דק'` : `בעוד ${mins} דקות`;
-    } else {
-      const lateMins = Math.abs(diff);
-      feedingStatusText = `חלפו ${lateMins} דקות מהמועד המומלץ! 🍼`;
-    }
+  let feedingDescription = `${formatDuration(smartTimers.feedingIntervalMinutes)} אחרי ההאכלה האחרונה`;
+  if (smartTimers.feedingIntervalMinutes > 0 && lastFeeding) {
+    const next = new Date(new Date(lastFeeding.started_at).getTime() + smartTimers.feedingIntervalMinutes * 60000);
+    if (next.getTime() > Date.now()) feedingDescription += ` · בערך ב-${formatClock(next)}`;
   }
+  if (smartTimers.feedingIntervalMinutes === 0) feedingDescription = 'כבויה כרגע';
 
-  // Smart Wake window countdown
-  let wakeStatusText = '';
-  if (activeSleep) {
-    wakeStatusText = 'הקטנה ישנה כרגע 💤 (טיימר שינה פועל)';
-  } else {
-    // Find last ended sleep
-    const lastEndedSleep = events.find(e => e.type === 'sleep' && e.ended_at);
-    if (lastEndedSleep && smartTimers.wakeWindowMinutes > 0) {
-      const awakeMinutes = Math.floor((Date.now() - new Date(lastEndedSleep.ended_at!).getTime()) / 60000);
-      const remainingAwake = smartTimers.wakeWindowMinutes - awakeMinutes;
-      if (remainingAwake > 0) {
-        wakeStatusText = `ערה מזה ${awakeMinutes} דק' • נותרו כ-${remainingAwake} דק' עד השכבה`;
-      } else {
-        wakeStatusText = `ערה כבר ${awakeMinutes} דק' • מומלץ להשכיב למניעת עייפות יתר 😴`;
+  let wakeDescription = 'כבויה כרגע';
+  if (smartTimers.wakeWindowMinutes > 0) {
+    wakeDescription = `אחרי ${formatDuration(smartTimers.wakeWindowMinutes)} של ערות`;
+    if (activeSleep) {
+      wakeDescription += ` · ${babyName} ישנה עכשיו`;
+    } else {
+      const lastEndedSleep = events.find(e => e.type === 'sleep' && e.ended_at);
+      if (lastEndedSleep?.ended_at) {
+        const awake = Math.floor((Date.now() - new Date(lastEndedSleep.ended_at).getTime()) / 60000);
+        if (awake >= 0 && awake < 24 * 60) wakeDescription += ` · ערה כבר ${awake} דק׳`;
       }
     }
   }
 
-  const iconOptions = ['☀️', '💧', '🛁', '🍼', '💊', '🩺', '🐢', '⭐️', '🧺', '🧸'];
+  const stopwatchDescription =
+    smartTimers.stopwatchAlertMinutes > 0
+      ? `אם טיימר שינה או הנקה פועל מעל ${formatDuration(smartTimers.stopwatchAlertMinutes)}`
+      : 'כבויה כרגע';
+
+  const timerRows: { key: TimerKey; label: string; description: string; tone: Tone }[] = [
+    { key: 'feedingIntervalMinutes', label: 'זמן האכלה', description: feedingDescription, tone: 'feed' },
+    { key: 'wakeWindowMinutes', label: 'חלון ערות', description: wakeDescription, tone: 'sleep' },
+    { key: 'stopwatchAlertMinutes', label: 'טיימר שנשכח פתוח', description: stopwatchDescription, tone: 'weight' },
+  ];
+
+  const subtitle =
+    activeReminders.length > 0 ? `${completedCount} מתוך ${activeReminders.length} הושלמו היום` : 'יום רגוע, בלי משימות';
 
   return (
-    <div className="space-y-4 pb-20 animate-in fade-in duration-200">
-      
-      {/* Header Banner */}
-      <div className="bg-gradient-to-r from-rose-500 to-pink-500 rounded-3xl p-4 text-white shadow-md relative overflow-hidden">
-        <div className="absolute -top-6 -left-6 w-24 h-24 bg-white/10 rounded-full blur-xl pointer-events-none" />
-        <div className="relative z-10 flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-2xl">⏰</span>
-              <h2 className="text-lg font-black tracking-tight">תזכורות וסדר יום</h2>
+    <div className="animate-fade-in">
+      <header className="flex items-end justify-between mb-5">
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[15px] text-muted tabular-nums">{subtitle}</span>
+          <h1 className="text-[26px] font-medium tracking-tight">תזכורות</h1>
+        </div>
+        <button
+          type="button"
+          aria-label="הוספת תזכורת"
+          title="הוספת תזכורת"
+          onClick={() => setIsAdding(true)}
+          className="w-12 h-12 rounded-full bg-primary-soft text-primary-ink flex items-center justify-center shrink-0 transition-transform active:scale-95"
+        >
+          <Plus className="w-[22px] h-[22px]" {...ICON_PROPS} />
+        </button>
+      </header>
+
+      <div className="flex flex-col gap-7">
+        {/* Daily routine */}
+        <section className="flex flex-col gap-3">
+          <SectionTitle aside="מתאפס בכל לילה">סדר היום</SectionTitle>
+          <Card className="py-2">
+            {sortedReminders.length === 0 ? (
+              <p className="px-[18px] py-5 text-[15px] text-muted text-center">עוד אין תזכורות. אפשר להוסיף בכפתור הפלוס.</p>
+            ) : (
+              <ul className="flex flex-col">
+                {sortedReminders.map((item, idx) => {
+                  const done = item.enabled && item.lastCompletedDate === todayStr;
+                  const look = CATEGORY_LOOK[item.category] || CATEGORY_LOOK.custom;
+                  const Icon = look.Icon;
+                  return (
+                    <li
+                      key={item.id}
+                      className={cx('flex items-center gap-2 pe-2', idx > 0 && 'border-t border-line')}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => openEdit(item)}
+                        aria-label={`עריכת ${item.title}`}
+                        className={cx(
+                          'flex-1 min-w-0 flex items-center gap-3 ps-[18px] py-3 text-start',
+                          !item.enabled && 'opacity-50'
+                        )}
+                      >
+                        <span className={cx('transition-opacity', done && 'opacity-60')}>
+                          <IconBadge tone={look.tone}>
+                            <Icon {...ICON_PROPS} />
+                          </IconBadge>
+                        </span>
+                        <span className="flex-1 min-w-0 flex flex-col">
+                          <span
+                            className={cx(
+                              'text-[15px] font-medium truncate',
+                              done ? 'text-muted line-through decoration-faint' : 'text-ink'
+                            )}
+                          >
+                            {item.title}
+                          </span>
+                          <span className="text-[13px] text-muted tabular-nums flex items-center gap-1.5">
+                            {item.enabled ? (
+                              item.time
+                            ) : (
+                              <>
+                                <BellOff className="w-3.5 h-3.5" {...ICON_PROPS} />
+                                מושהית
+                              </>
+                            )}
+                            {item.enabled && item.description && (
+                              <span className="truncate">· {item.description}</span>
+                            )}
+                          </span>
+                        </span>
+                      </button>
+                      {item.enabled && (
+                        <button
+                          type="button"
+                          onClick={() => handleToggleComplete(item)}
+                          aria-pressed={done}
+                          aria-label={done ? `${item.title} סומנה, לביטול` : `סימון ${item.title} כבוצע`}
+                          className="w-11 h-11 rounded-full flex items-center justify-center shrink-0"
+                        >
+                          <CheckCircle done={done} />
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Card>
+        </section>
+
+        {/* Smart gentle alerts */}
+        <section className="flex flex-col gap-3">
+          <div className="flex flex-col gap-0.5">
+            <SectionTitle>התראות עדינות</SectionTitle>
+            <p className="px-1 text-[13px] text-muted">נזכיר לך בשקט, כדי שלא תצטרכו לזכור הכל לבד</p>
+          </div>
+          <Card className="py-2">
+            <ul className="flex flex-col">
+              {timerRows.map((row, idx) => {
+                const value = smartTimers[row.key];
+                const enabled = value > 0;
+                const cfg = TIMER_OPTIONS[row.key];
+                return (
+                  <li key={row.key} className={cx(idx > 0 && 'border-t border-line')}>
+                    <Toggle
+                      checked={enabled}
+                      onChange={on => setTimer(row.key, on ? cfg.defaultValue : 0)}
+                      label={row.label}
+                      description={<span className="tabular-nums">{row.description}</span>}
+                    />
+                    {enabled && (
+                      <div className="flex gap-2 px-[18px] pb-3" role="group" aria-label={`תדירות עבור ${row.label}`}>
+                        {cfg.options.map(opt => (
+                          <Choice
+                            key={opt}
+                            selected={value === opt}
+                            tone={row.tone}
+                            onClick={() => setTimer(row.key, opt)}
+                            className="flex-1 min-h-11 rounded-full tabular-nums"
+                          >
+                            {formatShortDuration(opt)}
+                          </Choice>
+                        ))}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </Card>
+
+          {supported && notificationPermission !== 'granted' && (
+            <Card className="p-5 flex flex-col gap-4">
+              <div className="flex items-start gap-3">
+                <IconBadge tone="primary">
+                  <Bell {...ICON_PROPS} />
+                </IconBadge>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[15px] font-medium text-ink">שנזכיר לך גם כשהאפליקציה סגורה?</span>
+                  <span className="text-[13px] text-muted">
+                    {notificationPermission === 'denied'
+                      ? 'ההתראות חסומות כרגע בהגדרות הדפדפן. אפשר לאפשר אותן שם, ולחזור לכאן.'
+                      : 'התראה קטנה ושקטה במסך, רק כשבאמת צריך.'}
+                  </span>
+                </div>
+              </div>
+              {notificationPermission !== 'denied' && (
+                <Button onClick={handleEnableNotifications} block>
+                  הפעלת התראות
+                </Button>
+              )}
+            </Card>
+          )}
+
+          {supported && notificationPermission === 'granted' && (
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[13px] text-muted">ההתראות פועלות במכשיר הזה</span>
+              <Button variant="ghost" size="md" onClick={handleTestNotification} className="px-3">
+                <Bell {...ICON_PROPS} />
+                בדיקת התראה
+              </Button>
             </div>
-            <p className="text-xs text-rose-100 font-medium mt-1">
-              מעקב משימות יומיות, ויטמינים והאכלות עבור {profile.name || 'הנסיכה'}
-            </p>
-          </div>
-
-          {/* Progress Circle / Badge */}
-          <div className="bg-white/20 backdrop-blur-md rounded-2xl px-3 py-2 text-center border border-white/25">
-            <span className="text-xs font-bold block text-rose-100">היום בוצע</span>
-            <span className="text-lg font-black">{completedCount}/{activeReminders.length}</span>
-          </div>
-        </div>
-
-        {/* Mini Progress Bar */}
-        <div className="mt-3 bg-black/15 rounded-full h-2 overflow-hidden">
-          <div 
-            className="bg-white h-full transition-all duration-500 rounded-full"
-            style={{ width: `${progressPercent}%` }}
-          />
-        </div>
+          )}
+        </section>
       </div>
 
-      {/* Notification Permission Card */}
-      {notificationPermission !== 'granted' ? (
-        <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-3.5 shadow-2xs flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-2xs">
-              <BellRing className="w-5 h-5 animate-bounce" />
-            </div>
-            <div>
-              <h4 className="text-xs font-bold text-amber-900">הפעלת התראות לטלפון</h4>
-              <p className="text-[11px] text-amber-700">קבלי תזכורת ישירות למסך הנעילה בגלקסי</p>
-            </div>
-          </div>
-          <button
-            onClick={handleEnableNotifications}
-            className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-xs shrink-0"
-          >
-            הפעל התראות 🔔
-          </button>
-        </div>
-      ) : (
-        <div className="bg-emerald-50 border border-emerald-200/80 rounded-2xl px-3.5 py-2 flex items-center justify-between text-xs font-bold text-emerald-800">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>התראות פעילות במכשיר זה</span>
-          </div>
-          <button
-            onClick={handleTestNotification}
-            className="text-[11px] text-emerald-700 hover:text-emerald-900 bg-white/80 px-2 py-0.5 rounded-lg border border-emerald-300 active:scale-95 transition-transform flex items-center gap-1"
-          >
-            <Volume2 className="w-3 h-3" />
-            <span>בדיקת צליל והתראה</span>
-          </button>
-        </div>
-      )}
+      {/* Add reminder */}
+      <Sheet
+        open={isAdding}
+        onClose={() => setIsAdding(false)}
+        title="תזכורת חדשה"
+        icon={<Heart {...ICON_PROPS} />}
+        footer={
+          <Button type="submit" form="add-reminder-form" block disabled={!newTitle.trim()}>
+            שמירה
+          </Button>
+        }
+      >
+        <form id="add-reminder-form" onSubmit={handleAdd} className="flex flex-col gap-4">
+          <Field label="מה להזכיר">
+            <input
+              type="text"
+              required
+              autoFocus
+              placeholder="למשל: תרופה, שאיבה, תור לטיפת חלב"
+              value={newTitle}
+              onChange={e => setNewTitle(e.target.value)}
+              className={fieldClass}
+            />
+          </Field>
+          <Field label="באיזו שעה">
+            <input
+              type="time"
+              value={newTime}
+              onChange={e => setNewTime(e.target.value)}
+              className={cx(fieldClass, 'tabular-nums')}
+            />
+          </Field>
+          <Field label="הערה קצרה (לא חובה)">
+            <input
+              type="text"
+              placeholder="למשל: 5 טיפות לפני האוכל"
+              value={newDesc}
+              onChange={e => setNewDesc(e.target.value)}
+              className={fieldClass}
+            />
+          </Field>
+        </form>
+      </Sheet>
 
-      {/* Section 1: Today's Daily Checklist */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-1.5">
-            <CheckCircle2 className="w-4 h-4 text-rose-500" />
-            <h3 className="font-extrabold text-sm text-slate-800">צ׳קליסט יומי להיום</h3>
-          </div>
-          <span className="text-[11px] text-slate-400 font-medium">מתאפס כל לילה בחצות</span>
-        </div>
+      {/* Edit reminder */}
+      <Sheet
+        open={!!editingItem}
+        onClose={closeEdit}
+        title={editingItem?.title || ''}
+        tone={editingItem ? (CATEGORY_LOOK[editingItem.category] || CATEGORY_LOOK.custom).tone : 'primary'}
+        icon={
+          editingItem
+            ? React.createElement((CATEGORY_LOOK[editingItem.category] || CATEGORY_LOOK.custom).Icon, ICON_PROPS)
+            : undefined
+        }
+        footer={
+          <Button type="submit" form="edit-reminder-form" block disabled={!editTitle.trim()}>
+            שמירה
+          </Button>
+        }
+      >
+        {editingItem && (
+          <form id="edit-reminder-form" onSubmit={saveEdit} className="flex flex-col gap-4">
+            <Field label="מה להזכיר">
+              <input type="text" required value={editTitle} onChange={e => setEditTitle(e.target.value)} className={fieldClass} />
+            </Field>
+            <Field label="באיזו שעה">
+              <input
+                type="time"
+                value={editTime}
+                onChange={e => setEditTime(e.target.value)}
+                className={cx(fieldClass, 'tabular-nums')}
+              />
+            </Field>
+            <Field label="הערה קצרה (לא חובה)">
+              <input type="text" value={editDesc} onChange={e => setEditDesc(e.target.value)} className={fieldClass} />
+            </Field>
 
-        <div className="space-y-2">
-          {reminders.map(item => {
-            const isCompleted = item.lastCompletedDate === todayStr;
+            <Card className="py-1 -mx-1">
+              <Toggle
+                checked={editingItem.enabled}
+                onChange={v => setEnabled(editingItem.id, v)}
+                label="תזכורת פעילה"
+                description={editingItem.enabled ? 'מופיעה בסדר היום' : 'מושהית, אפשר להחזיר בכל רגע'}
+              />
+            </Card>
 
-            return (
-              <div
-                key={item.id}
-                className={`p-3.5 rounded-2xl border transition-all ${
-                  !item.enabled
-                    ? 'bg-slate-50/60 border-slate-200 opacity-60'
-                    : isCompleted
-                    ? 'bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-200 shadow-2xs'
-                    : 'bg-white border-rose-100 hover:border-rose-200 shadow-xs'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  
-                  {/* Left/Right Icon & Content */}
-                  <div className="flex items-start gap-3 flex-1 min-w-0">
-                    <span className="text-2xl shrink-0 p-1 bg-white rounded-xl shadow-2xs border border-slate-100">
-                      {item.icon}
-                    </span>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className={`text-sm font-extrabold truncate ${
-                          isCompleted ? 'text-emerald-900 line-through decoration-emerald-500/60' : 'text-slate-800'
-                        }`}>
-                          {item.title}
-                        </h4>
-                        <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-md font-bold flex items-center gap-1">
-                          <Clock className="w-2.5 h-2.5" />
-                          {item.time}
-                        </span>
-                      </div>
-
-                      {item.description && (
-                        <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
-                          {item.description}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Actions / Toggle Complete Button */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    {item.enabled && (
-                      <button
-                        onClick={() => handleToggleComplete(item)}
-                        className={`px-3 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 active:scale-95 shadow-xs ${
-                          isCompleted
-                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                            : 'bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 text-white shadow-rose-200'
-                        }`}
-                      >
-                        {isCompleted ? (
-                          <>
-                            <Check className="w-4 h-4 stroke-[3]" />
-                            <span>בוצע! ✅</span>
-                          </>
-                        ) : (
-                          <>
-                            <Check className="w-3.5 h-3.5 opacity-80" />
-                            <span>סמן כבוצע</span>
-                          </>
-                        )}
-                      </button>
-                    )}
-
-                    {/* Quick options menu / toggle enabled */}
-                    <button
-                      onClick={(e) => handleToggleEnabled(item.id, e)}
-                      title={item.enabled ? 'השבת תזכורת' : 'הפעל תזכורת'}
-                      className={`p-2 rounded-xl border transition-colors ${
-                        item.enabled 
-                          ? 'text-slate-400 hover:text-slate-600 hover:bg-slate-100 border-slate-200' 
-                          : 'text-rose-500 bg-rose-50 border-rose-200 font-bold text-[10px]'
-                      }`}
-                    >
-                      {item.enabled ? <Bell className="w-3.5 h-3.5" /> : <BellOff className="w-3.5 h-3.5" />}
-                    </button>
-
-                    {item.category === 'custom' && (
-                      <button
-                        onClick={() => setItemToDelete(item)}
-                        title="מחק תזכורת זו"
-                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+            {editingItem.category === 'custom' &&
+              (confirmingDelete ? (
+                <div className="flex flex-col gap-3 rounded-[24px] bg-danger-soft p-4">
+                  <span className="text-[15px] text-ink">למחוק את התזכורת "{editingItem.title}"?</span>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="danger" size="md" className="flex-1" onClick={deleteEditing}>
+                      מחיקה
+                    </Button>
+                    <Button type="button" variant="soft" size="md" className="flex-1" onClick={() => setConfirmingDelete(false)}>
+                      השארה
+                    </Button>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Add custom reminder trigger button */}
-        {!isAddingNew ? (
-          <button
-            onClick={() => setIsAddingNew(true)}
-            className="w-full py-2.5 rounded-2xl border-2 border-dashed border-rose-200 hover:border-rose-400 bg-rose-50/40 hover:bg-rose-50 text-rose-700 font-bold text-xs flex items-center justify-center gap-2 transition-all active:scale-[0.99]"
-          >
-            <Plus className="w-4 h-4" />
-            <span>הוספת משימה או תזכורת יומית חדשה (+)</span>
-          </button>
-        ) : (
-          <form 
-            onSubmit={handleAddNewReminder}
-            className="bg-white p-4 rounded-3xl border border-rose-200 shadow-md space-y-3 animate-in zoom-in-95 duration-150"
-          >
-            <div className="flex items-center justify-between border-b border-rose-100 pb-2">
-              <h4 className="font-extrabold text-xs text-rose-700">תזכורת מותאמת אישית חדשה</h4>
-              <button 
-                type="button" 
-                onClick={() => setIsAddingNew(false)}
-                className="text-slate-400 hover:text-slate-600 p-1"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-bold text-slate-600 mb-1">שם התזכורת</label>
-              <input
-                type="text"
-                required
-                placeholder="למשל: תרופה, שאיבת חלב, תור לטיפת חלב..."
-                value={newTitle}
-                onChange={e => setNewTitle(e.target.value)}
-                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-hidden focus:border-rose-400"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 mb-1">שעת התראה</label>
-                <input
-                  type="time"
-                  value={newTime}
-                  onChange={e => setNewTime(e.target.value)}
-                  className="w-full px-3 py-1.5 text-xs rounded-xl border border-slate-200 focus:outline-hidden focus:border-rose-400 font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 mb-1">אייקון</label>
-                <div className="flex items-center gap-1 overflow-x-auto py-1">
-                  {iconOptions.slice(0, 5).map(ico => (
-                    <button
-                      type="button"
-                      key={ico}
-                      onClick={() => setNewIcon(ico)}
-                      className={`text-base p-1.5 rounded-lg border ${
-                        newIcon === ico ? 'bg-rose-100 border-rose-400' : 'bg-slate-50 border-slate-200'
-                      }`}
-                    >
-                      {ico}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-bold text-slate-600 mb-1">הערה / הנחיה קצרה (אופציונלי)</label>
-              <input
-                type="text"
-                placeholder="למשל: 5 טיפות לפני האוכל"
-                value={newDesc}
-                onChange={e => setNewDesc(e.target.value)}
-                className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-hidden focus:border-rose-400"
-              />
-            </div>
-
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                type="submit"
-                className="flex-1 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
-              >
-                שמור תזכורת
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsAddingNew(false)}
-                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-all"
-              >
-                ביטול
-              </button>
-            </div>
+              ) : (
+                <Button type="button" variant="ghost" size="md" onClick={() => setConfirmingDelete(true)} className="self-start px-3">
+                  <Trash2 {...ICON_PROPS} />
+                  מחיקת התזכורת
+                </Button>
+              ))}
           </form>
         )}
-      </div>
-
-      {/* Section 2: Smart Dynamic Timers */}
-      <div className="space-y-2 pt-2">
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-1.5">
-            <Timer className="w-4 h-4 text-indigo-500" />
-            <h3 className="font-extrabold text-sm text-slate-800">טיימרים חכמים דינמיים</h3>
-          </div>
-          <span className="text-[11px] text-indigo-600 font-bold bg-indigo-50 px-2 py-0.5 rounded-full">חי אוטומטי</span>
-        </div>
-
-        {/* Feeding Smart Timer Card */}
-        <div className="bg-white p-3.5 rounded-2xl border border-indigo-100 shadow-xs space-y-2.5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">🍼</span>
-              <div>
-                <h4 className="text-xs font-bold text-slate-800">תזכורת האכלה אוטומטית</h4>
-                <p className="text-[10px] text-slate-500">
-                  {lastFeeding 
-                    ? `האכלה אחרונה: ${new Date(lastFeeding.started_at).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}` 
-                    : 'טרם נרשמה האכלה היום'}
-                </p>
-              </div>
-            </div>
-
-            {feedingStatusText && (
-              <span className={`text-[10px] font-extrabold px-2 py-1 rounded-lg ${
-                feedingDueInMinutes !== null && feedingDueInMinutes <= 0
-                  ? 'bg-rose-100 text-rose-700 animate-pulse'
-                  : 'bg-indigo-50 text-indigo-700'
-              }`}>
-                {feedingStatusText}
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-50">
-            <span className="text-slate-600 font-medium">הזכר לי כל:</span>
-            <div className="flex items-center gap-1">
-              {[
-                { label: '2.5 שע׳', value: 150 },
-                { label: '3 שע׳', value: 180 },
-                { label: '3.5 שע׳', value: 210 },
-                { label: 'כבוי', value: 0 }
-              ].map(opt => (
-                <button
-                  key={opt.value}
-                  onClick={() => onUpdateSmartTimers({ ...smartTimers, feedingIntervalMinutes: opt.value })}
-                  className={`px-2 py-1 rounded-lg font-bold transition-all text-[10px] ${
-                    smartTimers.feedingIntervalMinutes === opt.value
-                      ? 'bg-indigo-600 text-white shadow-2xs'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Wake Window Smart Timer Card */}
-        <div className="bg-white p-3.5 rounded-2xl border border-purple-100 shadow-xs space-y-2.5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">😴</span>
-              <div>
-                <h4 className="text-xs font-bold text-slate-800">חלון ערות ומניעת עייפות יתר</h4>
-                <p className="text-[10px] text-slate-500">
-                  {wakeStatusText || 'מעקב חלון שינה פועל ברקע'}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-50">
-            <span className="text-slate-600 font-medium">הגבלת חלון ערות:</span>
-            <div className="flex items-center gap-1">
-              {[
-                { label: '60 דק׳', value: 60 },
-                { label: '75 דק׳', value: 75 },
-                { label: '90 דק׳', value: 90 },
-                { label: 'כבוי', value: 0 }
-              ].map(opt => (
-                <button
-                  key={opt.value}
-                  onClick={() => onUpdateSmartTimers({ ...smartTimers, wakeWindowMinutes: opt.value })}
-                  className={`px-2 py-1 rounded-lg font-bold transition-all text-[10px] ${
-                    smartTimers.wakeWindowMinutes === opt.value
-                      ? 'bg-purple-600 text-white shadow-2xs'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Stopwatch Reminder Card */}
-        <div className="bg-white p-3.5 rounded-2xl border border-amber-100 shadow-xs space-y-2.5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">⏱️</span>
-              <div>
-                <h4 className="text-xs font-bold text-slate-800">התראת סטופר שנשכח</h4>
-                <p className="text-[10px] text-slate-500">
-                  תזכורת אם טיימר שינה או הנקה רץ מעבר לזמן הרגיל
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-50">
-            <span className="text-slate-600 font-medium">התראה לאחר:</span>
-            <div className="flex items-center gap-1">
-              {[
-                { label: '45 דק׳', value: 45 },
-                { label: '60 דק׳', value: 60 },
-                { label: '90 דק׳', value: 90 },
-                { label: 'כבוי', value: 0 }
-              ].map(opt => (
-                <button
-                  key={opt.value}
-                  onClick={() => onUpdateSmartTimers({ ...smartTimers, stopwatchAlertMinutes: opt.value })}
-                  className={`px-2 py-1 rounded-lg font-bold transition-all text-[10px] ${
-                    smartTimers.stopwatchAlertMinutes === opt.value
-                      ? 'bg-amber-600 text-white shadow-2xs'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      {/* Delete Item Modal */}
-      <ConfirmDeleteModal
-        isOpen={!!itemToDelete}
-        onClose={() => setItemToDelete(null)}
-        onConfirm={confirmDelete}
-        title="מחיקת תזכורת"
-        description={`האם את בטוחה שברצונך למחוק את התזכורת "${itemToDelete?.title}"?`}
-      />
-
+      </Sheet>
     </div>
   );
 };

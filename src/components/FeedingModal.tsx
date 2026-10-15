@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, Play, Pause, Check, RotateCcw, Milk } from 'lucide-react';
-import { FeedingType, BreastSide, BottleContent, BabyEvent } from '../types';
+import { Play, Pause, Check, RotateCcw, Milk } from 'lucide-react';
+import { BreastSide, BottleContent, BabyEvent } from '../types';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
+import { Sheet, Button, Choice, Field, Segmented, IconButton, fieldClass } from './ui';
 
 interface FeedingModalProps {
   isOpen: boolean;
@@ -9,12 +10,28 @@ interface FeedingModalProps {
   onSaveEvent: (eventData: Partial<BabyEvent>) => void;
 }
 
+type FeedTab = 'breast' | 'bottle' | 'solids';
+
+const nowHHMM = (offsetMinutes = 0) => {
+  const d = new Date(Date.now() + offsetMinutes * 60000);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+
+const todayAt = (hhmm: string) => {
+  const now = new Date();
+  const [h, m] = hhmm.split(':').map(Number);
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m);
+};
+
+const SIDE_LABEL: Record<BreastSide, string> = { right: 'ימין', left: 'שמאל', both: 'שניהם' };
+
 export const FeedingModal: React.FC<FeedingModalProps> = ({
   isOpen,
   onClose,
   onSaveEvent
 }) => {
-  const [activeTab, setActiveTab] = useState<'liveBreast' | 'bottle' | 'manual'>('liveBreast');
+  const [activeTab, setActiveTab] = useState<FeedTab>('breast');
+  const [breastMode, setBreastMode] = useState<'live' | 'manual'>('live');
 
   // Live Timer State
   const [timerRunning, setTimerRunning] = useState(false);
@@ -27,20 +44,26 @@ export const FeedingModal: React.FC<FeedingModalProps> = ({
   // Bottle State
   const [bottleAmount, setBottleAmount] = useState<number>(60);
   const [bottleContent, setBottleContent] = useState<BottleContent>('breast_milk');
-  const [bottleTime, setBottleTime] = useState<string>(() => {
-    const d = new Date();
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  });
+  const [bottleTime, setBottleTime] = useState<string>(() => nowHHMM());
+  const [bottleDuration, setBottleDuration] = useState<number>(15);
 
-  // Manual State
-  const [manualType, setManualType] = useState<FeedingType>('breast');
+  // Manual breast State
   const [manualSide, setManualSide] = useState<BreastSide>('both');
-  const [manualStartTime, setManualStartTime] = useState<string>(() => {
-    const d = new Date();
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  });
+  const [manualStartTime, setManualStartTime] = useState<string>(() => nowHHMM());
   const [manualDuration, setManualDuration] = useState<number>(20);
+
+  // Solids State
+  const [solidsTime, setSolidsTime] = useState<string>(() => nowHHMM());
+
   const [notes, setNotes] = useState('');
+
+  // Refresh the default times every time the sheet opens
+  useEffect(() => {
+    if (!isOpen) return;
+    setBottleTime(nowHHMM());
+    setManualStartTime(nowHHMM());
+    setSolidsTime(nowHHMM());
+  }, [isOpen]);
 
   // Timer interval effect
   useEffect(() => {
@@ -58,17 +81,24 @@ export const FeedingModal: React.FC<FeedingModalProps> = ({
     return () => clearInterval(interval);
   }, [timerRunning, activeSide, liveStartTime]);
 
-  if (!isOpen) return null;
+  const totalSeconds = secondsLeft + secondsRight;
 
-  const formatTimerDigits = (sec: number) => {
+  const formatMinSec = (sec: number) => {
     const m = Math.floor(sec / 60);
     const s = sec % 60;
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   };
 
+  const resetTimer = () => {
+    setTimerRunning(false);
+    setSecondsLeft(0);
+    setSecondsRight(0);
+    setLiveStartTime(null);
+  };
+
   const handleSaveLiveTimer = () => {
-    const totalMinutes = Math.max(1, Math.round((secondsLeft + secondsRight) / 60));
-    const start = liveStartTime || new Date(Date.now() - (secondsLeft + secondsRight) * 1000);
+    const totalMinutes = Math.max(1, Math.round(totalSeconds / 60));
+    const start = liveStartTime || new Date(Date.now() - totalSeconds * 1000);
     const end = new Date();
 
     let side: BreastSide = 'both';
@@ -89,29 +119,24 @@ export const FeedingModal: React.FC<FeedingModalProps> = ({
       notes: notes || undefined
     });
 
-    // Reset and close
-    setTimerRunning(false);
-    setSecondsLeft(0);
-    setSecondsRight(0);
-    setLiveStartTime(null);
+    resetTimer();
     setNotes('');
     onClose();
   };
 
   const handleSaveBottle = () => {
-    const now = new Date();
-    const [h, m] = bottleTime.split(':').map(Number);
-    const eventDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m);
+    const eventDate = todayAt(bottleTime);
+    const duration = Math.max(1, bottleDuration || 15);
 
     onSaveEvent({
       type: 'feeding',
       started_at: eventDate.toISOString(),
-      ended_at: new Date(eventDate.getTime() + 15 * 60000).toISOString(),
+      ended_at: new Date(eventDate.getTime() + duration * 60000).toISOString(),
       details: {
         feedType: 'bottle',
         bottleAmountMl: bottleAmount,
         bottleContent: bottleContent,
-        durationMinutes: 15
+        durationMinutes: duration
       },
       notes: notes || undefined
     });
@@ -121,9 +146,7 @@ export const FeedingModal: React.FC<FeedingModalProps> = ({
   };
 
   const handleSaveManual = () => {
-    const now = new Date();
-    const [h, m] = manualStartTime.split(':').map(Number);
-    const startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m);
+    const startDate = todayAt(manualStartTime);
     const endDate = new Date(startDate.getTime() + manualDuration * 60000);
 
     onSaveEvent({
@@ -131,11 +154,9 @@ export const FeedingModal: React.FC<FeedingModalProps> = ({
       started_at: startDate.toISOString(),
       ended_at: endDate.toISOString(),
       details: {
-        feedType: manualType,
-        breastSide: manualType === 'breast' ? manualSide : undefined,
-        durationMinutes: manualDuration,
-        bottleAmountMl: manualType === 'bottle' ? bottleAmount : undefined,
-        bottleContent: manualType === 'bottle' ? bottleContent : undefined
+        feedType: 'breast',
+        breastSide: manualSide,
+        durationMinutes: manualDuration
       },
       notes: notes || undefined
     });
@@ -144,395 +165,314 @@ export const FeedingModal: React.FC<FeedingModalProps> = ({
     onClose();
   };
 
+  const handleSaveSolids = () => {
+    const eventDate = todayAt(solidsTime);
+
+    onSaveEvent({
+      type: 'feeding',
+      started_at: eventDate.toISOString(),
+      details: {
+        feedType: 'solids'
+      },
+      notes: notes || undefined
+    });
+
+    setNotes('');
+    onClose();
+  };
+
+  const startSide = (side: 'left' | 'right') => {
+    setActiveSide(side);
+    setTimerRunning(true);
+  };
+
+  // ----- Footer: one clear primary action per state -----
+  let footer: React.ReactNode;
+  if (activeTab === 'breast' && breastMode === 'live') {
+    footer =
+      totalSeconds === 0 && !timerRunning ? (
+        <Button block tone="feed" onClick={() => startSide(activeSide)}>
+          <Play />
+          <span>להתחיל הנקה</span>
+        </Button>
+      ) : (
+        <Button block tone="feed" disabled={totalSeconds === 0} onClick={handleSaveLiveTimer}>
+          <Check />
+          <span>סיום ושמירה</span>
+        </Button>
+      );
+  } else if (activeTab === 'breast') {
+    footer = (
+      <Button block tone="feed" onClick={handleSaveManual}>
+        <Check />
+        <span>שמירה</span>
+      </Button>
+    );
+  } else if (activeTab === 'bottle') {
+    footer = (
+      <Button block tone="feed" onClick={handleSaveBottle}>
+        <Check />
+        <span>שמירת בקבוק</span>
+      </Button>
+    );
+  } else {
+    footer = (
+      <Button block tone="feed" onClick={handleSaveSolids}>
+        <Check />
+        <span>שמירה</span>
+      </Button>
+    );
+  }
+
+  const totalH = Math.floor(totalSeconds / 3600);
+  const totalM = Math.floor((totalSeconds % 3600) / 60);
+  const totalS = totalSeconds % 60;
+
+  const notesField = (placeholder: string) => (
+    <Field label="הערה (לא חובה)">
+      <input
+        type="text"
+        placeholder={placeholder}
+        value={notes}
+        onChange={e => setNotes(e.target.value)}
+        className={fieldClass}
+      />
+    </Field>
+  );
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-xs p-0 sm:p-4">
-      <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden border border-rose-100 max-h-[92vh] flex flex-col animate-in slide-in-from-bottom-6 duration-200">
-        
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-rose-50/60">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-rose-500 text-white flex items-center justify-center">
-              <Milk className="w-4 h-4" />
-            </div>
-            <h2 className="font-bold text-slate-800 text-lg">מעקב האכלה</h2>
-          </div>
-          <button 
-            onClick={onClose}
-            className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+    <>
+      <Sheet open={isOpen} onClose={onClose} title="האכלה" icon={<Milk />} tone="feed" footer={footer}>
+        <Segmented<FeedTab>
+          label="סוג האכלה"
+          value={activeTab}
+          onChange={setActiveTab}
+          options={[
+            { value: 'breast', label: 'הנקה' },
+            { value: 'bottle', label: 'בקבוק' },
+            { value: 'solids', label: 'מוצקים' }
+          ]}
+        />
 
-        {/* Tab Selector */}
-        <div className="grid grid-cols-3 p-2 bg-slate-100/80 gap-1 text-xs font-semibold">
-          <button
-            onClick={() => setActiveTab('liveBreast')}
-            className={`py-2 rounded-xl transition-all ${
-              activeTab === 'liveBreast'
-                ? 'bg-white text-rose-600 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            ⏱️ הנקה חיה
-          </button>
-          <button
-            onClick={() => setActiveTab('bottle')}
-            className={`py-2 rounded-xl transition-all ${
-              activeTab === 'bottle'
-                ? 'bg-white text-rose-600 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            🍼 בקבוק
-          </button>
-          <button
-            onClick={() => setActiveTab('manual')}
-            className={`py-2 rounded-xl transition-all ${
-              activeTab === 'manual'
-                ? 'bg-white text-rose-600 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            ✍️ הוספה ידנית
-          </button>
-        </div>
-
-        {/* Content Body */}
-        <div className="p-5 overflow-y-auto space-y-5 flex-1">
-          
-          {/* TAB 1: Live Breastfeeding Timer */}
-          {activeTab === 'liveBreast' && (
-            <div className="space-y-5 text-center">
-              <div className="text-3xl font-extrabold text-slate-800 font-mono tracking-wider">
-                {formatTimerDigits(secondsLeft + secondsRight)}
+        {/* Breast: live timer */}
+        {activeTab === 'breast' && breastMode === 'live' && (
+          <div className="space-y-5">
+            <div className="text-center pt-2">
+              <div className="text-[40px] leading-none font-medium text-ink tabular-nums" dir="ltr">
+                {totalH}:{String(totalM).padStart(2, '0')}
+                <span className="text-[20px] text-faint">:{String(totalS).padStart(2, '0')}</span>
               </div>
-              <p className="text-xs text-slate-500">
-                זמן האכלה כולל
+              <p className="text-[13px] text-muted mt-2">
+                {timerRunning
+                  ? `מניקה מצד ${SIDE_LABEL[activeSide]}`
+                  : totalSeconds > 0
+                  ? 'מושהה'
+                  : 'בוחרים צד והטיימר מתחיל'}
               </p>
-
-              {/* Side Toggles */}
-              <div className="grid grid-cols-2 gap-3">
-                {/* Right Side (appears on the right) */}
-                <button
-                  onClick={() => {
-                    setActiveSide('right');
-                    setTimerRunning(true);
-                  }}
-                  className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-1 ${
-                    activeSide === 'right' && timerRunning
-                      ? 'border-rose-500 bg-rose-50/80 text-rose-700 shadow-md ring-2 ring-rose-200'
-                      : 'border-slate-200 bg-slate-50/60 text-slate-700 hover:border-slate-300'
-                  }`}
-                >
-                  <span className="text-xs font-semibold">שד ימין</span>
-                  <span className="text-2xl font-bold font-mono">
-                    {formatTimerDigits(secondsRight)}
-                  </span>
-                  {activeSide === 'right' && timerRunning && (
-                    <span className="text-[10px] bg-rose-500 text-white px-2 py-0.5 rounded-full font-medium animate-pulse mt-1">
-                      מניקה כעת...
-                    </span>
-                  )}
-                </button>
-
-                {/* Left Side (appears on the left) */}
-                <button
-                  onClick={() => {
-                    setActiveSide('left');
-                    setTimerRunning(true);
-                  }}
-                  className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-1 ${
-                    activeSide === 'left' && timerRunning
-                      ? 'border-rose-500 bg-rose-50/80 text-rose-700 shadow-md ring-2 ring-rose-200'
-                      : 'border-slate-200 bg-slate-50/60 text-slate-700 hover:border-slate-300'
-                  }`}
-                >
-                  <span className="text-xs font-semibold">שד שמאל</span>
-                  <span className="text-2xl font-bold font-mono">
-                    {formatTimerDigits(secondsLeft)}
-                  </span>
-                  {activeSide === 'left' && timerRunning && (
-                    <span className="text-[10px] bg-rose-500 text-white px-2 py-0.5 rounded-full font-medium animate-pulse mt-1">
-                      מניקה כעת...
-                    </span>
-                  )}
-                </button>
-              </div>
-
-              {/* Control Buttons */}
-              <div className="flex items-center justify-center gap-3 pt-2">
-                <button
-                  onClick={() => setTimerRunning(!timerRunning)}
-                  className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-bold text-white shadow-md active:scale-95 transition-all ${
-                    timerRunning ? 'bg-amber-500 hover:bg-amber-600' : 'bg-rose-500 hover:bg-rose-600'
-                  }`}
-                >
-                  {timerRunning ? (
-                    <>
-                      <Pause className="w-5 h-5" />
-                      <span>השהה טיימר</span>
-                    </>
-                  ) : (
-                    <>
-                      <Play className="w-5 h-5 fill-current" />
-                      <span>{secondsLeft + secondsRight > 0 ? 'המשך' : 'התחל עכשיו'}</span>
-                    </>
-                  )}
-                </button>
-
-                {(secondsLeft + secondsRight > 0) && (
-                  <button
-                    onClick={() => setShowResetConfirm(true)}
-                    className="p-3 rounded-2xl border border-slate-200 text-slate-500 hover:bg-slate-100 transition-colors"
-                    title="איפוס טיימר"
-                  >
-                    <RotateCcw className="w-5 h-5" />
-                  </button>
-                )}
-              </div>
-
-              {/* Notes */}
-              <div className="text-right">
-                <label className="text-xs font-medium text-slate-600 mb-1 block">הערות נוספות:</label>
-                <input
-                  type="text"
-                  placeholder="למשל: תפסה יפה, פלטה קצת, נרדמה על השד..."
-                  value={notes}
-                  onChange={e => setNotes(e.target.value)}
-                  className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-400"
-                />
-              </div>
-
-              {/* Save Button */}
-              <button
-                disabled={secondsLeft + secondsRight === 0}
-                onClick={handleSaveLiveTimer}
-                className="w-full py-3.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-2xl shadow-md shadow-rose-200 transition-all flex items-center justify-center gap-2"
-              >
-                <Check className="w-5 h-5" />
-                <span>סיום ושמירת האכלה</span>
-              </button>
             </div>
-          )}
 
-          {/* TAB 2: Bottle Feeding */}
-          {activeTab === 'bottle' && (
-            <div className="space-y-4 text-right">
-              {/* Milk type */}
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-2">סוג החלב:</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setBottleContent('breast_milk')}
-                    className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all ${
-                      bottleContent === 'breast_milk'
-                        ? 'bg-rose-50 border-rose-400 text-rose-700 ring-1 ring-rose-300'
-                        : 'border-slate-200 text-slate-600'
-                    }`}
+            <div className="grid grid-cols-2 gap-3">
+              {(['right', 'left'] as const).map(side => {
+                const isActive = activeSide === side && timerRunning;
+                const secs = side === 'right' ? secondsRight : secondsLeft;
+                return (
+                  <Choice
+                    key={side}
+                    tone="feed"
+                    selected={isActive}
+                    onClick={() => startSide(side)}
+                    className="min-h-[92px]"
                   >
-                    🍼 חלב אם שאוב
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBottleContent('formula')}
-                    className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all ${
-                      bottleContent === 'formula'
-                        ? 'bg-rose-50 border-rose-400 text-rose-700 ring-1 ring-rose-300'
-                        : 'border-slate-200 text-slate-600'
-                    }`}
-                  >
-                    🥣 תמ"ל (מטרנה/סימילאק)
-                  </button>
-                </div>
+                    <span className="flex flex-col items-center gap-1">
+                      <span className="text-[15px]">{SIDE_LABEL[side]}</span>
+                      <span className="text-[20px] font-medium tabular-nums" dir="ltr">
+                        {formatMinSec(secs)}
+                      </span>
+                    </span>
+                  </Choice>
+                );
+              })}
+            </div>
+
+            {totalSeconds > 0 && (
+              <div className="flex items-center justify-center gap-3">
+                <Button variant="soft" size="md" onClick={() => setTimerRunning(!timerRunning)}>
+                  {timerRunning ? <Pause /> : <Play />}
+                  <span>{timerRunning ? 'השהיה' : 'המשך'}</span>
+                </Button>
+                <IconButton label="איפוס טיימר" tone="sunken" onClick={() => setShowResetConfirm(true)}>
+                  <RotateCcw />
+                </IconButton>
               </div>
+            )}
 
-              {/* Quick Amount selection */}
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-2">
-                  כמות שנאכלה: <span className="text-rose-600 font-bold text-sm">{bottleAmount} מ"ל</span>
-                </label>
-                <div className="grid grid-cols-5 gap-1.5 mb-2">
-                  {[30, 60, 90, 120, 150].map(amount => (
-                    <button
-                      key={amount}
-                      type="button"
-                      onClick={() => setBottleAmount(amount)}
-                      className={`py-2 rounded-xl text-xs font-bold border transition-all ${
-                        bottleAmount === amount
-                          ? 'bg-rose-500 text-white border-rose-600 shadow-xs'
-                          : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
-                      }`}
-                    >
-                      {amount}
-                    </button>
-                  ))}
-                </div>
+            {notesField('תפסה יפה, נרדמה על השד...')}
+
+            <button
+              type="button"
+              onClick={() => setBreastMode('manual')}
+              className="w-full min-h-12 text-[13px] text-muted"
+            >
+              שכחתם להפעיל טיימר? הוספה ידנית
+            </button>
+          </div>
+        )}
+
+        {/* Breast: manual entry */}
+        {activeTab === 'breast' && breastMode === 'manual' && (
+          <div className="space-y-5">
+            <div className="space-y-1.5">
+              <span className="text-[13px] text-muted px-1">צד</span>
+              <div className="grid grid-cols-3 gap-2">
+                {(['right', 'left', 'both'] as BreastSide[]).map(s => (
+                  <Choice key={s} tone="feed" selected={manualSide === s} onClick={() => setManualSide(s)}>
+                    {SIDE_LABEL[s]}
+                  </Choice>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="שעת התחלה">
                 <input
-                  type="range"
-                  min="10"
-                  max="250"
-                  step="5"
-                  value={bottleAmount}
-                  onChange={e => setBottleAmount(Number(e.target.value))}
-                  className="w-full accent-rose-500"
+                  type="time"
+                  value={manualStartTime}
+                  onChange={e => setManualStartTime(e.target.value)}
+                  className={fieldClass}
                 />
-              </div>
+              </Field>
+              <Field label="משך בדקות">
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min="1"
+                  max="120"
+                  value={manualDuration}
+                  onChange={e => setManualDuration(Number(e.target.value))}
+                  className={fieldClass}
+                />
+              </Field>
+            </div>
 
-              {/* Time */}
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">שעת האכלה:</label>
+            {notesField('הערה קצרה...')}
+
+            <button
+              type="button"
+              onClick={() => setBreastMode('live')}
+              className="w-full min-h-12 text-[13px] text-muted"
+            >
+              חזרה לטיימר
+            </button>
+          </div>
+        )}
+
+        {/* Bottle */}
+        {activeTab === 'bottle' && (
+          <div className="space-y-5">
+            <div className="space-y-1.5">
+              <span className="text-[13px] text-muted px-1">מה בבקבוק</span>
+              <div className="grid grid-cols-2 gap-2">
+                <Choice tone="feed" selected={bottleContent === 'breast_milk'} onClick={() => setBottleContent('breast_milk')}>
+                  חלב אם
+                </Choice>
+                <Choice tone="feed" selected={bottleContent === 'formula'} onClick={() => setBottleContent('formula')}>
+                  תמ"ל
+                </Choice>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-baseline justify-between px-1">
+                <span className="text-[13px] text-muted">כמות</span>
+                <span className="text-[15px] font-medium text-ink tabular-nums">{bottleAmount} מ"ל</span>
+              </div>
+              <div className="grid grid-cols-5 gap-2">
+                {[30, 60, 90, 120, 150].map(amount => (
+                  <Choice
+                    key={amount}
+                    tone="feed"
+                    selected={bottleAmount === amount}
+                    onClick={() => setBottleAmount(amount)}
+                    className="px-0 tabular-nums"
+                  >
+                    {amount}
+                  </Choice>
+                ))}
+              </div>
+              <input
+                type="range"
+                min="10"
+                max="250"
+                step="5"
+                value={bottleAmount}
+                onChange={e => setBottleAmount(Number(e.target.value))}
+                aria-label="כמות במ״ל"
+                className="w-full h-10 accent-feed"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="שעה">
                 <input
                   type="time"
                   value={bottleTime}
                   onChange={e => setBottleTime(e.target.value)}
-                  className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-400"
+                  className={fieldClass}
                 />
-              </div>
-
-              {/* Notes */}
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">הערות:</label>
+              </Field>
+              <Field label="משך בדקות">
                 <input
-                  type="text"
-                  placeholder="הערות לגבי האכלה..."
-                  value={notes}
-                  onChange={e => setNotes(e.target.value)}
-                  className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-400"
+                  type="number"
+                  inputMode="numeric"
+                  min="1"
+                  max="120"
+                  value={bottleDuration}
+                  onChange={e => setBottleDuration(Number(e.target.value))}
+                  className={fieldClass}
                 />
-              </div>
-
-              <button
-                onClick={handleSaveBottle}
-                className="w-full py-3.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-2xl shadow-md shadow-rose-200 transition-all flex items-center justify-center gap-2 mt-4"
-              >
-                <Check className="w-5 h-5" />
-                <span>שמור האכלת בקבוק</span>
-              </button>
+              </Field>
             </div>
-          )}
 
-          {/* TAB 3: Manual Entry */}
-          {activeTab === 'manual' && (
-            <div className="space-y-4 text-right">
-              {/* Type */}
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-2">אופן האכלה:</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setManualType('breast')}
-                    className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
-                      manualType === 'breast'
-                        ? 'bg-rose-50 border-rose-400 text-rose-700'
-                        : 'border-slate-200 text-slate-600'
-                    }`}
-                  >
-                    הנקה
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setManualType('bottle')}
-                    className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
-                      manualType === 'bottle'
-                        ? 'bg-rose-50 border-rose-400 text-rose-700'
-                        : 'border-slate-200 text-slate-600'
-                    }`}
-                  >
-                    בקבוק
-                  </button>
-                </div>
-              </div>
+            {notesField('הערה קצרה...')}
+          </div>
+        )}
 
-              {manualType === 'breast' && (
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-2">צד:</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(['right', 'left', 'both'] as BreastSide[]).map(s => (
-                      <button
-                        key={s}
-                        type="button"
-                        onClick={() => setManualSide(s)}
-                        className={`py-2 rounded-xl text-xs font-bold border transition-all ${
-                          manualSide === s
-                            ? 'bg-rose-500 text-white border-rose-600'
-                            : 'border-slate-200 text-slate-700'
-                        }`}
-                      >
-                        {s === 'right' ? 'ימין' : s === 'left' ? 'שמאל' : 'שניהם'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+        {/* Solids */}
+        {activeTab === 'solids' && (
+          <div className="space-y-5">
+            <Field label="שעה">
+              <input
+                type="time"
+                value={solidsTime}
+                onChange={e => setSolidsTime(e.target.value)}
+                className={fieldClass}
+              />
+            </Field>
+            <Field label="מה אכלה">
+              <input
+                type="text"
+                placeholder="מחית בטטה, אבוקדו..."
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                className={fieldClass}
+              />
+            </Field>
+          </div>
+        )}
+      </Sheet>
 
-              {/* Start Time & Duration */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">שעת התחלה:</label>
-                  <input
-                    type="time"
-                    value={manualStartTime}
-                    onChange={e => setManualStartTime(e.target.value)}
-                    className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-400"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">משך (בדקות):</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="120"
-                    value={manualDuration}
-                    onChange={e => setManualDuration(Number(e.target.value))}
-                    className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-400"
-                  />
-                </div>
-              </div>
-
-              {/* Notes */}
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">הערות:</label>
-                <input
-                  type="text"
-                  placeholder="הערות לגבי האכלה..."
-                  value={notes}
-                  onChange={e => setNotes(e.target.value)}
-                  className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-400"
-                />
-              </div>
-
-              <button
-                onClick={handleSaveManual}
-                className="w-full py-3.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-2xl shadow-md shadow-rose-200 transition-all flex items-center justify-center gap-2 mt-4"
-              >
-                <Check className="w-5 h-5" />
-                <span>שמור האכלה ידנית</span>
-              </button>
-            </div>
-          )}
-
-        </div>
-
-      </div>
-
-      {/* Sleek Timer Reset Confirmation Modal */}
       <ConfirmDeleteModal
         isOpen={showResetConfirm}
-        title="לאפס את טיימר ההנקה?"
-        description="זמן ההאכלה הנוכחי יימחק ולא יישמר ביומן."
-        confirmText="כן, אפס טיימר"
-        cancelText="המשך מדידה"
+        title="לאפס את הטיימר?"
+        description="זמן ההנקה הנוכחי יימחק ולא יישמר."
+        confirmText="כן, לאפס"
+        cancelText="להמשיך"
         onConfirm={() => {
-          setTimerRunning(false);
-          setSecondsLeft(0);
-          setSecondsRight(0);
-          setLiveStartTime(null);
+          resetTimer();
           setShowResetConfirm(false);
         }}
         onClose={() => setShowResetConfirm(false)}
       />
-    </div>
+    </>
   );
 };

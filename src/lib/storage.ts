@@ -1,4 +1,5 @@
 import { BabyEvent, BabyProfile, DailyReminderItem, SmartTimersConfig } from '../types';
+import { localDateKey } from './babyUtils';
 
 const BABY_PROFILE_KEY = 'avigi_baby_profile';
 const BABY_EVENTS_KEY = 'avigi_baby_events';
@@ -23,7 +24,7 @@ export function getFamilyCodeFromUrl(): string | null {
 }
 
 export function getDefaultBabyProfile(customCode?: string): BabyProfile {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateKey();
   return {
     id: customCode || generateFamilyCode(),
     name: 'הנסיכה הקטנה',

@@ -1,150 +1,144 @@
 import React, { useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import { BabyEvent } from '../types';
-import { formatTime, formatDate } from '../lib/babyUtils';
-import { Milk, Droplets, Moon, Scale, Trash2 } from 'lucide-react';
+import { formatTime } from '../lib/babyUtils';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
+import { Card, IconButton, SectionTitle, cx } from './ui';
 
 interface TimelineListProps {
   events: BabyEvent[];
   onDeleteEvent: (id: string) => void;
+  /** Section heading (defaults to "מה קרה היום") */
+  title?: string;
+  /** Text shown when there are no events */
+  emptyText?: string;
+}
+
+/** Human duration in Hebrew: "45 דק׳", "שעה ו-20 דק׳", "שעתיים" */
+export function formatDuration(totalMinutes: number): string {
+  const m = Math.max(0, Math.round(totalMinutes));
+  const h = Math.floor(m / 60);
+  const rest = m % 60;
+  if (h === 0) return `${rest} דק׳`;
+  const hStr = h === 1 ? 'שעה' : h === 2 ? 'שעתיים' : `${h} שעות`;
+  return rest > 0 ? `${hStr} ו-${rest} דק׳` : hStr;
+}
+
+const DOT: Record<string, string> = {
+  feeding: 'bg-feed',
+  sleep: 'bg-sleep',
+  diaper: 'bg-diaper',
+  weight: 'bg-weight',
+  milestone: 'bg-primary',
+};
+
+function describe(event: BabyEvent): { main: string; extra?: string } {
+  const d = event.details || {};
+  if (event.type === 'feeding') {
+    if (d.feedType === 'breast') {
+      const side = d.breastSide === 'left' ? 'שמאל' : d.breastSide === 'right' ? 'ימין' : 'שני הצדדים';
+      const dur = d.durationMinutes ? ` · ${formatDuration(d.durationMinutes)}` : '';
+      return { main: `האכלה · הנקה, ${side}${dur}` };
+    }
+    if (d.feedType === 'solids') return { main: 'האכלה · מוצקים' };
+    const content = d.bottleContent === 'breast_milk' ? 'חלב שאוב' : d.bottleContent === 'water' ? 'מים' : 'תמ"ל';
+    return { main: `האכלה · בקבוק ${d.bottleAmountMl || 0} מ"ל`, extra: content };
+  }
+  if (event.type === 'diaper') {
+    const kind = d.diaperType === 'pee' ? 'פיפי' : d.diaperType === 'poop' ? 'קקי' : 'פיפי וקקי';
+    return { main: `חיתול · ${kind}`, extra: d.poopColor ? `צבע: ${d.poopColor}` : undefined };
+  }
+  if (event.type === 'sleep') {
+    if (d.isOngoing) return { main: 'שינה · ישנה עכשיו' };
+    const until = event.ended_at ? `עד ${formatTime(event.ended_at)}` : undefined;
+    return { main: `שינה · ${formatDuration(d.durationMinutes || 0)}`, extra: until };
+  }
+  if (event.type === 'weight') return { main: `שקילה · ${d.weightKg} ק"ג` };
+  if (event.type === 'milestone') return { main: `אבן דרך · ${d.title || ''}` };
+  return { main: 'רישום' };
+}
+
+function localDayKey(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+function dayTitle(iso: string): string {
+  const key = localDayKey(iso);
+  const now = new Date();
+  if (key === localDayKey(now.toISOString())) return 'היום';
+  if (key === localDayKey(new Date(now.getTime() - 86400000).toISOString())) return 'אתמול';
+  return new Date(iso).toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
 export const TimelineList: React.FC<TimelineListProps> = ({
   events,
-  onDeleteEvent
+  onDeleteEvent,
+  title = 'מה קרה היום',
+  emptyText = 'עוד לא נרשם כלום. כל רישום יופיע כאן.',
 }) => {
   const [eventToDelete, setEventToDelete] = useState<BabyEvent | null>(null);
 
-  if (events.length === 0) {
-    return (
-      <div className="max-w-md mx-auto px-4 py-8 text-center text-slate-400">
-        <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-rose-50 text-rose-300 flex items-center justify-center text-2xl">
-          🍼
-        </div>
-        <p className="text-sm font-semibold text-slate-600">עדיין אין פעולות רשומות</p>
-        <p className="text-xs text-slate-400 mt-1">השתמשו בכפתורי הרישום המהיר למעלה כדי להתחיל</p>
-      </div>
-    );
-  }
+  const sorted = [...events].sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
 
-  // Group events by day
-  const groupedEvents: { [dayKey: string]: BabyEvent[] } = {};
-  events.forEach(ev => {
-    const dayKey = ev.started_at.slice(0, 10);
-    if (!groupedEvents[dayKey]) groupedEvents[dayKey] = [];
-    groupedEvents[dayKey].push(ev);
+  // Group by local calendar day, newest first
+  const groups: { key: string; title: string; items: BabyEvent[] }[] = [];
+  sorted.forEach(ev => {
+    const key = localDayKey(ev.started_at);
+    const last = groups[groups.length - 1];
+    if (last && last.key === key) last.items.push(ev);
+    else groups.push({ key, title: dayTitle(ev.started_at), items: [ev] });
   });
-
-  const todayKey = new Date().toISOString().slice(0, 10);
-  const yesterdayKey = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const multiDay = groups.length > 1;
 
   return (
-    <div className="max-w-md mx-auto px-4 py-3 space-y-4">
-      <div className="flex items-center justify-between text-right px-1">
-        <h3 className="font-bold text-slate-700 text-sm">יומן פעילות יומי</h3>
-        <span className="text-xs text-slate-400 font-medium">{events.length} רישומים</span>
-      </div>
+    <section className="flex flex-col gap-3">
+      <SectionTitle aside={events.length > 0 ? `${events.length} רישומים` : undefined}>{title}</SectionTitle>
 
-      {Object.entries(groupedEvents).map(([dayKey, dayEvents]) => {
-        let dayTitle = formatDate(dayEvents[0].started_at);
-        if (dayKey === todayKey) dayTitle = 'היום';
-        else if (dayKey === yesterdayKey) dayTitle = 'אתמול';
-
-        return (
-          <div key={dayKey} className="space-y-2">
-            <div className="sticky top-14 z-10 bg-slate-50/90 backdrop-blur-xs py-1 px-2 rounded-lg text-xs font-bold text-slate-500 text-right">
-              📅 {dayTitle}
-            </div>
-
-            <div className="space-y-2">
-              {dayEvents.map(event => {
-                let icon = <Milk className="w-4 h-4" />;
-                let iconBg = 'bg-rose-500 text-white';
-                let title = 'פעולה';
-                let subtitle = '';
-
-                if (event.type === 'feeding') {
-                  icon = <Milk className="w-4 h-4" />;
-                  if (event.details?.feedType === 'breast') {
-                    title = 'הנקה';
-                    const side = event.details.breastSide === 'left' ? 'שמאל' : event.details.breastSide === 'right' ? 'ימין' : 'שני הצדדים';
-                    subtitle = `צד: ${side} • ${event.details.durationMinutes || 0} דקות`;
-                  } else {
-                    title = 'בקבוק';
-                    const content = event.details?.bottleContent === 'breast_milk' ? 'חלב שאוב' : 'תמ"ל';
-                    subtitle = `${event.details?.bottleAmountMl || 0} מ"ל (${content})`;
-                  }
-                } else if (event.type === 'diaper') {
-                  icon = <Droplets className="w-4 h-4" />;
-                  iconBg = 'bg-sky-500 text-white';
-                  const dType = event.details?.diaperType;
-                  title = 'החלפת טיטול';
-                  subtitle = dType === 'pee' ? 'פיפי 💧' : dType === 'poop' ? 'קקי 💩' : 'פיפי וקקי 💧💩';
-                  if (event.details?.poopColor) subtitle += ` • צבע: ${event.details.poopColor}`;
-                } else if (event.type === 'sleep') {
-                  icon = <Moon className="w-4 h-4" />;
-                  iconBg = 'bg-indigo-600 text-white';
-                  title = 'שינה';
-                  subtitle = event.details?.isOngoing 
-                    ? 'ישנה כעת... 💤' 
-                    : `משך שינה: ${event.details?.durationMinutes || 0} דקות`;
-                } else if (event.type === 'weight') {
-                  icon = <Scale className="w-4 h-4" />;
-                  iconBg = 'bg-amber-500 text-white';
-                  title = 'שקילה';
-                  subtitle = `${event.details?.weightKg} ק"ג`;
-                }
-
-                return (
-                  <div
-                    key={event.id}
-                    className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between gap-3 text-right group hover:border-slate-300 transition-all"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${iconBg}`}>
-                        {icon}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-slate-800 text-sm">{title}</span>
-                          <span className="text-[11px] font-semibold text-slate-400">
-                            {formatTime(event.started_at)}
-                            {event.ended_at && ` - ${formatTime(event.ended_at)}`}
+      {events.length === 0 ? (
+        <Card className="px-[22px] py-8 text-center">
+          <p className="text-[15px] text-muted">{emptyText}</p>
+        </Card>
+      ) : (
+        <Card className="px-[18px] py-3">
+          {groups.map((g, gi) => (
+            <div key={g.key} className={cx(gi > 0 && 'border-t border-line mt-2 pt-2')}>
+              {multiDay && <h3 className="px-1 pt-2 pb-1 text-[13px] text-muted">{g.title}</h3>}
+              <ol>
+                {g.items.map(event => {
+                  const { main, extra } = describe(event);
+                  return (
+                    <li key={event.id} className="flex items-center gap-3 min-h-[52px] py-1.5">
+                      <span className="w-12 shrink-0 text-[13px] text-muted tabular-nums">{formatTime(event.started_at)}</span>
+                      <span
+                        aria-hidden="true"
+                        className={cx('w-2.5 h-2.5 rounded-full shrink-0', DOT[event.type] || 'bg-faint')}
+                      />
+                      <div className="flex-1 min-w-0 flex flex-col">
+                        <span className="text-[15px] text-ink truncate">{main}</span>
+                        {(extra || event.notes) && (
+                          <span className="text-[13px] text-muted truncate">
+                            {[extra, event.notes].filter(Boolean).join(' · ')}
                           </span>
-                        </div>
-                        <p className="text-xs text-slate-600 font-medium mt-0.5">
-                          {subtitle}
-                        </p>
-                        {event.notes && (
-                          <p className="text-[11px] text-slate-400 mt-0.5 italic">
-                            "{event.notes}"
-                          </p>
                         )}
                       </div>
-                    </div>
-
-                    {/* Delete action opens sleek custom modal */}
-                    <button
-                      onClick={() => setEventToDelete(event)}
-                      className="text-slate-300 hover:text-rose-500 p-2 rounded-xl hover:bg-rose-50 transition-colors"
-                      title="מחק רישום"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                );
-              })}
+                      <IconButton label="מחיקה" tone="ghost" onClick={() => setEventToDelete(event)}>
+                        <Trash2 strokeWidth={1.75} />
+                      </IconButton>
+                    </li>
+                  );
+                })}
+              </ol>
             </div>
-          </div>
-        );
-      })}
+          ))}
+        </Card>
+      )}
 
-      {/* Sleek in-app custom delete confirmation modal */}
       <ConfirmDeleteModal
         isOpen={!!eventToDelete}
-        title="למחוק פעולה זו מהיומן?"
-        description="הפעולה תימחק לצמיתות מהיומן ומכל המכשירים המחוברים."
-        confirmText="כן, מחק עכשיו"
+        title="למחוק את הרישום?"
+        description="הרישום יימחק מהיומן ומכל המכשירים המחוברים."
+        confirmText="מחיקה"
         cancelText="ביטול"
         onConfirm={() => {
           if (eventToDelete) {
@@ -154,6 +148,6 @@ export const TimelineList: React.FC<TimelineListProps> = ({
         }}
         onClose={() => setEventToDelete(null)}
       />
-    </div>
+    </section>
   );
 };
