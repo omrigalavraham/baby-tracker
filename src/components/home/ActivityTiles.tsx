@@ -72,6 +72,8 @@ export const ActivityTiles: React.FC<ActivityTilesProps> = ({
   const lastSleep = events.find(e => e.type === 'sleep');
   const lastWeight = events.find(e => e.type === 'weight');
   const weightKg = lastWeight?.details?.weightKg || profile.birth_weight;
+  const lastHeight = events.find(e => e.type === 'height');
+  const growthParts = [weightKg ? `${weightKg} ק"ג` : null, lastHeight ? `${lastHeight.details?.heightCm} ס"מ` : null].filter(Boolean);
 
   const tiles: { type: string; tone: Tone; title: string; detail: string; icon: React.ReactNode; onClick: () => void }[] = [
     { type: 'feeding', tone: 'feed', title: 'האכלה', detail: feedingDetail(lastFeeding), icon: <Milk />, onClick: onOpenFeeding },
@@ -80,8 +82,8 @@ export const ActivityTiles: React.FC<ActivityTilesProps> = ({
     {
       type: 'weight',
       tone: 'weight',
-      title: 'משקל',
-      detail: weightKg ? `${weightKg} ק"ג · ${lastWeight ? formatTimeAgo(lastWeight.started_at) : 'משקל לידה'}` : 'עוד לא נרשם',
+      title: 'גדילה',
+      detail: growthParts.length ? growthParts.join(' · ') : 'עוד לא נרשם',
       icon: <Scale />,
       onClick: onOpenWeight,
     },
@@ -92,7 +94,7 @@ export const ActivityTiles: React.FC<ActivityTilesProps> = ({
       <SectionTitle>{isSleeping ? 'רישום מהיר' : 'מה היה לאחרונה'}</SectionTitle>
       <div className="grid grid-cols-2 gap-3">
         {tiles.map(t => {
-          const glowing = justLogged?.type === t.type;
+          const glowing = justLogged?.type === t.type || (t.type === 'weight' && justLogged?.type === 'height');
           return (
           <button
             key={glowing ? `${t.type}-${justLogged!.key}` : t.type}

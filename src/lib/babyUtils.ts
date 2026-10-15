@@ -171,6 +171,10 @@ export function exportEventsToCSV(events: BabyEvent[], profile: BabyProfile): vo
       typeHebrew = 'משקל';
       durationOrAmount = `${e.details?.weightKg} ק"ג`;
       detailsStr = 'שקילה ומעקב גדילה';
+    } else if (e.type === 'height') {
+      typeHebrew = 'גובה';
+      durationOrAmount = `${e.details?.heightCm} ס"מ`;
+      detailsStr = 'מדידת אורך';
     }
 
     return [

@@ -52,6 +52,8 @@ export function seedDemoData() {
     }
     add('weight', 3 * 24 * 60, { weightKg: 4.6 });
     add('weight', 17 * 24 * 60, { weightKg: 4.1 });
+    add('height', 3 * 24 * 60, { heightCm: 58.5 });
+    add('height', 31 * 24 * 60, { heightCm: 55 });
 
     events.sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime());
     localStorage.setItem('avigi_baby_events', JSON.stringify(events));

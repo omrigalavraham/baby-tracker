@@ -72,6 +72,12 @@
   --c-danger: #B5564F;
   --c-danger-soft: #F7E2DF;
 
+  /* Illustration colors (bottle, measuring mat) */
+  --c-milk: #FFF6E4;
+  --c-milk-deep: #F2DFC0;
+  --c-glass: rgb(255 255 255 / 0.7);
+  --c-skin: #F4D7C6;
+
   --s-soft: 0 1px 2px rgb(120 90 80 / 0.04), 0 12px 32px rgb(120 90 80 / 0.07);
   --s-float: 0 12px 32px rgb(120 90 80 / 0.12);
 
@@ -128,6 +134,11 @@ input, select, textarea {
 
   --c-danger: #E39A93;
   --c-danger-soft: #3A2427;
+
+  --c-milk: #E8DCC6;
+  --c-milk-deep: #BFAE90;
+  --c-glass: rgb(255 255 255 / 0.06);
+  --c-skin: #C9A797;
 
   --s-soft: 0 0 0 1px rgb(255 255 255 / 0.02);
   --s-float: 0 12px 32px rgb(0 0 0 / 0.35);

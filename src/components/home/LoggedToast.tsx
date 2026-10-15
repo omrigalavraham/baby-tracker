@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Droplet, Milk, Moon, Scale, Sun } from 'lucide-react';
+import { Droplet, Milk, Moon, Ruler, Scale, Sun } from 'lucide-react';
 import { EventType } from '../../types';
 import { IconBadge, Tone, cx } from '../ui';
 
@@ -11,13 +11,14 @@ export interface ToastData {
   undoId?: string;
 }
 
-const TONE_BY_TYPE: Record<string, Tone> = { feeding: 'feed', sleep: 'sleep', wake: 'weight', diaper: 'diaper', weight: 'weight' };
+const TONE_BY_TYPE: Record<string, Tone> = { feeding: 'feed', sleep: 'sleep', wake: 'weight', diaper: 'diaper', weight: 'weight', height: 'weight' };
 const ICON_BY_TYPE: Record<string, React.ReactNode> = {
   feeding: <Milk strokeWidth={1.6} />,
   sleep: <Moon strokeWidth={1.6} />,
   wake: <Sun strokeWidth={1.6} />,
   diaper: <Droplet strokeWidth={1.6} />,
   weight: <Scale strokeWidth={1.6} />,
+  height: <Ruler strokeWidth={1.6} />,
 };
 
 const VISIBLE_MS = 4200;

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Play, Pause, Check, RotateCcw, Milk } from 'lucide-react';
 import { BreastSide, BottleContent, BabyEvent } from '../types';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
+import { BottleFill } from './BottleFill';
 import { Sheet, Button, Choice, Field, Segmented, IconButton, fieldClass } from './ui';
 
 interface FeedingModalProps {
@@ -381,11 +382,8 @@ export const FeedingModal: React.FC<FeedingModalProps> = ({
               </div>
             </div>
 
-            <div className="space-y-2">
-              <div className="flex items-baseline justify-between px-1">
-                <span className="text-[13px] text-muted">כמות</span>
-                <span className="text-[15px] font-medium text-ink tabular-nums">{bottleAmount} מ"ל</span>
-              </div>
+            <div className="space-y-4">
+              <BottleFill value={bottleAmount} onChange={setBottleAmount} />
               <div className="grid grid-cols-5 gap-2">
                 {[30, 60, 90, 120, 150].map(amount => (
                   <Choice
@@ -399,16 +397,6 @@ export const FeedingModal: React.FC<FeedingModalProps> = ({
                   </Choice>
                 ))}
               </div>
-              <input
-                type="range"
-                min="10"
-                max="250"
-                step="5"
-                value={bottleAmount}
-                onChange={e => setBottleAmount(Number(e.target.value))}
-                aria-label="כמות במ״ל"
-                className="w-full h-10 accent-feed"
-              />
             </div>
 
             <div className="grid grid-cols-2 gap-3">

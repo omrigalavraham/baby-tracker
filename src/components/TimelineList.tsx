@@ -29,6 +29,7 @@ const DOT: Record<string, string> = {
   sleep: 'bg-sleep',
   diaper: 'bg-diaper',
   weight: 'bg-weight',
+  height: 'bg-weight',
   milestone: 'bg-primary',
 };
 
@@ -54,6 +55,7 @@ function describe(event: BabyEvent): { main: string; extra?: string } {
     return { main: `שינה · ${formatDuration(d.durationMinutes || 0)}`, extra: until };
   }
   if (event.type === 'weight') return { main: `שקילה · ${d.weightKg} ק"ג` };
+  if (event.type === 'height') return { main: `גובה · ${d.heightCm} ס"מ` };
   if (event.type === 'milestone') return { main: `אבן דרך · ${d.title || ''}` };
   return { main: 'רישום' };
 }

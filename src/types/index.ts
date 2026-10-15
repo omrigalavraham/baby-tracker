@@ -1,4 +1,4 @@
-export type EventType = 'feeding' | 'diaper' | 'sleep' | 'weight' | 'milestone';
+export type EventType = 'feeding' | 'diaper' | 'sleep' | 'weight' | 'height' | 'milestone';
 
 export type FeedingType = 'breast' | 'bottle' | 'solids';
 export type BreastSide = 'left' | 'right' | 'both';
@@ -27,6 +27,10 @@ export interface SleepDetails {
   isOngoing?: boolean;
 }
 
+export interface HeightDetails {
+  heightCm: number;
+}
+
 export interface WeightDetails {
   weightKg: number;
 }
@@ -42,6 +46,7 @@ export type EventDetails =
   | ({ type: 'diaper' } & DiaperDetails)
   | ({ type: 'sleep' } & SleepDetails)
   | ({ type: 'weight' } & WeightDetails)
+  | ({ type: 'height' } & HeightDetails)
   | ({ type: 'milestone' } & MilestoneDetails);
 
 export interface BabyEvent {

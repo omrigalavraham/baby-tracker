@@ -72,6 +72,8 @@ function loggedText(e: BabyEvent): string {
       return d.isOngoing ? 'התחלנו לספור. שינה נעימה' : 'שינה נרשמה';
     case 'diaper':
       return d.diaperType === 'pee' ? 'חיתול נרשם · פיפי' : d.diaperType === 'poop' ? 'חיתול נרשם · קקי' : 'חיתול נרשם';
+    case 'height':
+      return d.heightCm ? `גובה ${d.heightCm} ס"מ נרשם` : 'גובה נרשם';
     case 'weight':
       return d.weightKg ? `משקל ${d.weightKg} ק"ג נרשם` : 'משקל נרשם';
     default:
