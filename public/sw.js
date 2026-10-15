@@ -35,12 +35,41 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Network first, fallback to cache
-  event.respondWith(
-    fetch(event.request).catch(() => {
-      return caches.match(event.request);
-    })
-  );
+  const req = event.request;
+  const url = new URL(req.url);
+
+  // Only our own GET requests. Supabase and fonts go straight to the network.
+  if (req.method !== 'GET' || url.origin !== self.location.origin) return;
+
+  // The page itself and the version file: always fresh from the server (never the
+  // browser's HTTP cache), so a new deploy shows up on the next open.
+  if (req.mode === 'navigate' || url.pathname === '/version.json') {
+    event.respondWith(
+      fetch(req, { cache: 'no-store' }).catch(() => caches.match(req).then(r => r || caches.match('/index.html')))
+    );
+    return;
+  }
+
+  // Build assets have a content hash in their name, so a cached copy is always correct
+  if (url.pathname.startsWith('/assets/')) {
+    event.respondWith(
+      caches.match(req).then(
+        cached =>
+          cached ||
+          fetch(req).then(res => {
+            if (res.ok) {
+              const copy = res.clone();
+              caches.open(CACHE_NAME).then(c => c.put(req, copy));
+            }
+            return res;
+          })
+      )
+    );
+    return;
+  }
+
+  // Everything else: network first, cache as offline fallback
+  event.respondWith(fetch(req).catch(() => caches.match(req)));
 });
 
 // Notifications sent by the server (Supabase "send-reminders"), even when the app is closed

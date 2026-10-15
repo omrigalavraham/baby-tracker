@@ -49,6 +49,8 @@ import { showAppNotification } from './lib/notificationService';
 import { ensurePushSubscription, isPushActive, syncFamilySettings } from './lib/pushService';
 import { localDateKey } from './lib/babyUtils';
 import { ThemeMode, loadThemeMode, saveThemeMode, useNightMode } from './lib/theme';
+import { applyUpdate, useAppUpdate } from './lib/appUpdate';
+import { Sparkles } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 const stagger = (i: number) => ({ '--d': `${60 + i * 90}ms` }) as React.CSSProperties;
@@ -93,6 +95,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>(loadThemeMode);
   const isNight = useNightMode(themeMode);
+  const updateReady = useAppUpdate();
 
   const handleChangeTheme = (mode: ThemeMode) => {
     setThemeMode(mode);
@@ -628,6 +631,19 @@ export function App() {
       )}
 
       <LoggedToast toast={toast} onUndo={handleDeleteEvent} onDone={clearToast} />
+
+      {/* A new version went live while the app was open */}
+      {updateReady && (
+        <div className="fixed inset-x-0 top-0 z-40 px-[22px] pt-[max(12px,env(safe-area-inset-top))] pointer-events-none">
+          <div className="max-w-md mx-auto flex items-center gap-3 ps-4 pe-1.5 py-1.5 rounded-full bg-surface shadow-float pointer-events-auto animate-toast-in">
+            <Sparkles className="w-5 h-5 text-primary-ink shrink-0" strokeWidth={1.6} />
+            <span className="flex-1 text-[15px] text-ink">יש גרסה חדשה של האפליקציה</span>
+            <button onClick={applyUpdate} className="h-10 px-4 rounded-full bg-primary-soft text-primary-ink text-[14px] font-medium shrink-0">
+              עדכון
+            </button>
+          </div>
+        </div>
+      )}
 
       {appReady && <BottomNav value={mainTab} onChange={setMainTab} pendingReminders={pendingDailyReminders.length} />}
 
