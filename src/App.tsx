@@ -45,6 +45,7 @@ import { LoggedToast, ToastData } from './components/home/LoggedToast';
 import { haptic } from './components/ui';
 
 import { showAppNotification } from './lib/notificationService';
+import { ensurePushSubscription, isPushActive, syncFamilySettings } from './lib/pushService';
 import { localDateKey } from './lib/babyUtils';
 import { ThemeMode, loadThemeMode, saveThemeMode, useNightMode } from './lib/theme';
 import confetti from 'canvas-confetti';
@@ -387,11 +388,37 @@ export function App() {
     handleUpdateReminders(updated);
   };
 
-  // Background timer for alerts & reminders (every 30s)
+  // Mirror reminder settings to the server so it can notify while the app is closed
+  useEffect(() => {
+    if (!isSynced) return;
+    const t = setTimeout(() => syncFamilySettings(profile.id, reminders, smartTimers), 1200);
+    return () => clearTimeout(t);
+  }, [isSynced, profile.id, reminders, smartTimers]);
+
+  // Register this phone for push once notifications are allowed (also right after the user allows them)
+  useEffect(() => {
+    if (!isSynced) return;
+    ensurePushSubscription(profile.id);
+    let status: PermissionStatus | null = null;
+    const onChange = () => ensurePushSubscription(profile.id);
+    navigator.permissions
+      ?.query({ name: 'notifications' as PermissionName })
+      .then(s => {
+        status = s;
+        s.addEventListener('change', onChange);
+      })
+      .catch(() => {});
+    return () => status?.removeEventListener('change', onChange);
+  }, [isSynced, profile.id]);
+
+  // In-app timer for alerts & reminders (every 30s). Used only when server push isn't set up,
+  // otherwise the server sends them and we'd notify twice.
   useEffect(() => {
     if (!smartTimers.notificationsEnabled) return;
 
     const checkAlerts = () => {
+      if (isPushActive()) return;
+
       const now = new Date();
       const currentHours = String(now.getHours()).padStart(2, '0');
       const currentMins = String(now.getMinutes()).padStart(2, '0');

@@ -1,5 +1,5 @@
 // Minimal Service Worker for PWA installability and offline caching
-const CACHE_NAME = 'baby-tracker-v2';
+const CACHE_NAME = 'baby-tracker-v3';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -39,6 +39,29 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(event.request).catch(() => {
       return caches.match(event.request);
+    })
+  );
+});
+
+// Notifications sent by the server (Supabase "send-reminders"), even when the app is closed
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { body: event.data ? event.data.text() : '' };
+  }
+  const title = data.title || 'בייבי יומן';
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: data.body || '',
+      tag: data.tag || 'avigi',
+      icon: '/icon-192.png',
+      badge: '/badge-96.png',
+      dir: 'rtl',
+      lang: 'he',
+      renotify: true,
+      vibrate: [120, 80, 120]
     })
   );
 });
