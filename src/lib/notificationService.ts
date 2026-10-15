@@ -75,8 +75,8 @@ export async function showAppNotification(
   const {
     body = '',
     tag = 'baby-notification',
-    icon = '/icon.svg',
-    badge = '/icon.svg',
+    icon = '/icon-192.png',
+    badge = '/badge-96.png',
     playSound = true,
     cooldownMinutes = 30
   } = options;

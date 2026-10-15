@@ -1,5 +1,5 @@
 // Minimal Service Worker for PWA installability and offline caching
-const CACHE_NAME = 'baby-tracker-v1';
+const CACHE_NAME = 'baby-tracker-v2';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -9,6 +9,9 @@ self.addEventListener('install', (event) => {
         '/index.html',
         '/manifest.webmanifest',
         '/icon.svg',
+        '/icon-192.png',
+        '/icon-512.png',
+        '/badge-96.png',
         '/favicon.svg'
       ]);
     })

@@ -74,6 +74,17 @@
 
   --s-soft: 0 1px 2px rgb(120 90 80 / 0.04), 0 12px 32px rgb(120 90 80 / 0.07);
   --s-float: 0 12px 32px rgb(120 90 80 / 0.12);
+
+  /* Declaring dark support stops Chrome / Samsung Internet "force dark" from repainting the app */
+  color-scheme: light dark;
+}
+
+/* ...but native controls (time pickers, selects) follow our own mode, not the OS */
+input, select, textarea {
+  color-scheme: light;
+}
+.night input, .night select, .night textarea {
+  color-scheme: dark;
 }
 
 .night {

@@ -1,18 +1,21 @@
 {
+  "id": "/",
   "name": "בייבי יומן - מעקב תינוקות",
   "short_name": "בייבי יומן",
   "description": "יומן מעקב האכלות, חיתולים, שינה והתפתחות לתינוקות",
+  "lang": "he",
+  "dir": "rtl",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#fff1f2",
-  "theme_color": "#f43f5e",
+  "background_color": "#FBF7F3",
+  "theme_color": "#FBF7F3",
   "orientation": "portrait",
   "icons": [
-    {
-      "src": "/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    }
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ]
 }
