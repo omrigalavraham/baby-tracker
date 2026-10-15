@@ -259,7 +259,7 @@ export const RemindersTab: React.FC<RemindersTabProps> = ({
       <div className="flex flex-col gap-7">
         {/* Daily routine */}
         <section className="flex flex-col gap-3">
-          <SectionTitle aside="מתאפס בכל לילה">סדר היום</SectionTitle>
+          <SectionTitle aside="הקישו על תזכורת לעריכה או מחיקה">סדר היום</SectionTitle>
           <Card className="py-2">
             {sortedReminders.length === 0 ? (
               <p className="px-[18px] py-5 text-[15px] text-muted text-center">עוד אין תזכורות. אפשר להוסיף בכפתור הפלוס.</p>
@@ -494,8 +494,7 @@ export const RemindersTab: React.FC<RemindersTabProps> = ({
               />
             </Card>
 
-            {editingItem.category === 'custom' &&
-              (confirmingDelete ? (
+            {(confirmingDelete ? (
                 <div className="flex flex-col gap-3 rounded-[24px] bg-danger-soft p-4">
                   <span className="text-[15px] text-ink">למחוק את התזכורת "{editingItem.title}"?</span>
                   <div className="flex gap-2">
@@ -508,7 +507,7 @@ export const RemindersTab: React.FC<RemindersTabProps> = ({
                   </div>
                 </div>
               ) : (
-                <Button type="button" variant="ghost" size="md" onClick={() => setConfirmingDelete(true)} className="self-start px-3">
+                <Button type="button" variant="danger" size="md" block onClick={() => setConfirmingDelete(true)}>
                   <Trash2 {...ICON_PROPS} />
                   מחיקת התזכורת
                 </Button>
