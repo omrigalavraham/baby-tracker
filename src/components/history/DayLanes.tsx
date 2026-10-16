@@ -140,7 +140,7 @@ export const DayLanes: React.FC<{ events: BabyEvent[]; from: number; filters: Ca
 
   // ---- Full size: a 24h clock, one ring per type (outermost first), midnight at the top ----
   const C = 160;
-  const RADII = [122, 95, 68];
+  const RADII = [118, 92, 66];
   const angle = (t: number) => ((t - from) / DAY_MS) * Math.PI * 2;
   const at = (r: number, a: number) => ({ x: C + r * Math.sin(a), y: C - r * Math.cos(a) });
   const arc = (r: number, a1: number, a2: number) => {
@@ -155,20 +155,83 @@ export const DayLanes: React.FC<{ events: BabyEvent[]; from: number; filters: Ca
     <div className="flex flex-col items-center gap-3">
       <div className="relative w-full max-w-[320px] aspect-square">
         <svg viewBox="0 0 320 320" className="block w-full h-full" role="img" aria-label="שעון של 24 שעות: שינה, האכלות וחיתולים">
-          {/* hour ticks and labels */}
+          <defs>
+            <radialGradient id="dialG" cx="50%" cy="38%" r="70%">
+              <stop offset="0" style={{ stopColor: 'var(--c-dial-hi)' }} />
+              <stop offset="1" style={{ stopColor: 'var(--c-dial)' }} />
+            </radialGradient>
+            {/* rose gold: the same metal in day and night */}
+            <linearGradient id="roseGoldG" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stopColor="#F6D5C6" />
+              <stop offset=".35" stopColor="#D9967F" />
+              <stop offset=".55" stopColor="#FBE3D6" />
+              <stop offset=".8" stopColor="#C27E6A" />
+              <stop offset="1" stopColor="#EFC2B0" />
+            </linearGradient>
+            <linearGradient id="gemG" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stopColor="#FFE6F0" />
+              <stop offset=".45" stopColor="#F5A3C4" />
+              <stop offset="1" stopColor="#D85C92" />
+            </linearGradient>
+          </defs>
+
+          {/* bezel and dial */}
+          <circle cx={C} cy={C} r="157" fill="url(#roseGoldG)" />
+          <circle cx={C} cy={C} r="148" fill="url(#dialG)" />
+          <circle cx={C} cy={C} r="148" fill="none" stroke="#B8735F" strokeOpacity=".45" strokeWidth="1" />
+          <circle cx={C} cy={C} r="152.5" fill="none" stroke="#FFF4EE" strokeOpacity=".6" strokeWidth=".8" />
+          {/* sunburst brushing */}
+          {Array.from({ length: 120 }, (_, i) => {
+            const a = (i / 120) * Math.PI * 2;
+            const p1 = at(14, a);
+            const p2 = at(147, a);
+            return <line key={i} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="var(--c-dial-line)" strokeWidth=".7" />;
+          })}
+
+          {/* hour markers: rose-gold numerals at 00 / 06 / 12 / 18, pink diamonds elsewhere */}
           {Array.from({ length: 24 }, (_, h) => {
             const a = (h / 24) * Math.PI * 2;
-            const major = h % 6 === 0;
-            const p1 = at(major ? 136 : 138, a);
-            const p2 = at(142, a);
-            return <line key={h} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="var(--c-faint)" strokeWidth={major ? 2 : 1} strokeLinecap="round" />;
-          })}
-          {HOURS.slice(0, 4).map(h => {
-            const p = at(152, (h / 24) * Math.PI * 2);
+            const p = at(137, a);
+            if (h % 6 === 0) {
+              return (
+                <text
+                  key={h}
+                  x={p.x}
+                  y={p.y}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fontSize="13"
+                  fontWeight="600"
+                  fill="url(#roseGoldG)"
+                  stroke="#A9644F"
+                  strokeOpacity=".35"
+                  strokeWidth=".4"
+                  style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}
+                >
+                  {String(h).padStart(2, '0')}
+                </text>
+              );
+            }
+            const s = h % 2 === 0 ? 1 : 0.72;
             return (
-              <text key={h} x={p.x} y={p.y} textAnchor="middle" dominantBaseline="central" fontSize="11" fill="var(--c-muted)">
-                {String(h).padStart(2, '0')}
-              </text>
+              <g key={h} transform={`translate(${p.x} ${p.y}) rotate(${(h / 24) * 360}) scale(${s})`}>
+                <polygon points="0,-6.5 4.2,0 0,6.5 -4.2,0" fill="url(#gemG)" stroke="#FFFFFF" strokeOpacity=".7" strokeWidth=".6" />
+                <polyline points="-4.2,0 0,-2 4.2,0" fill="none" stroke="#FFFFFF" strokeOpacity=".75" strokeWidth=".5" />
+                <line x1="0" y1="-6.5" x2="0" y2="6.5" stroke="#FFFFFF" strokeOpacity=".35" strokeWidth=".4" />
+              </g>
+            );
+          })}
+          {/* a few glints on the diamonds */}
+          {[2, 8, 14, 20].map((h, i) => {
+            const p = at(137, (h / 24) * Math.PI * 2);
+            return (
+              <path
+                key={h}
+                d={`M${p.x + 5} ${p.y - 9} l1 3 3 1 -3 1 -1 3 -1 -3 -3 -1 3 -1 z`}
+                fill="#FFFFFF"
+                className="gem-glint"
+                style={{ animationDelay: `${i * 1.1}s` }}
+              />
             );
           })}
 
@@ -177,7 +240,7 @@ export const DayLanes: React.FC<{ events: BabyEvent[]; from: number; filters: Ca
             const items = dayEvents.filter(e => e.type === lane.id);
             return (
               <g key={lane.id}>
-                <circle cx={C} cy={C} r={r} fill="none" stroke="var(--c-sunken)" strokeWidth="20" />
+                <circle cx={C} cy={C} r={r} fill="none" stroke="var(--c-dial-track)" strokeWidth="20" />
                 {items.map(e => {
                   const s = new Date(e.started_at).getTime();
                   const sel = e.id === selected;
@@ -226,8 +289,27 @@ export const DayLanes: React.FC<{ events: BabyEvent[]; from: number; filters: Ca
           {/* the clock hand at the current time */}
           {nowA !== null && (
             <g pointerEvents="none">
-              <line {...(() => { const a = at(52, nowA); const b = at(140, nowA); return { x1: a.x, y1: a.y, x2: b.x, y2: b.y }; })()} stroke="var(--c-ink)" strokeOpacity=".3" strokeWidth="2" strokeLinecap="round" />
-              <circle {...(() => { const b = at(140, nowA); return { cx: b.x, cy: b.y }; })()} r="3.5" fill="var(--c-ink)" fillOpacity=".45" />
+              {(() => {
+                // A tapered rose-gold hand with a small diamond at the tip
+                const base = at(54, nowA);
+                const tip = at(128, nowA);
+                const side = { x: Math.cos(nowA) * 3, y: Math.sin(nowA) * 3 };
+                return (
+                  <>
+                    <polygon
+                      points={`${base.x + side.x},${base.y + side.y} ${tip.x},${tip.y} ${base.x - side.x},${base.y - side.y}`}
+                      fill="url(#roseGoldG)"
+                      stroke="#A9644F"
+                      strokeOpacity=".5"
+                      strokeWidth=".6"
+                      strokeLinejoin="round"
+                    />
+                    <g transform={`translate(${tip.x} ${tip.y}) rotate(${(nowA * 180) / Math.PI})`}>
+                      <polygon points="0,-5 3.2,0 0,5 -3.2,0" fill="url(#gemG)" stroke="#FFFFFF" strokeOpacity=".8" strokeWidth=".6" />
+                    </g>
+                  </>
+                );
+              })()}
             </g>
           )}
         </svg>

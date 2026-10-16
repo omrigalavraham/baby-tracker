@@ -79,6 +79,12 @@
   --c-skin: #F4D7C6;
   --c-skin-deep: #E8BFA9;
   --c-hand: #EBC9B2;
+
+  /* Watch dial in the history summary */
+  --c-dial: #F6E1E4;
+  --c-dial-hi: #FFF9F8;
+  --c-dial-line: rgb(190 120 130 / 0.07);
+  --c-dial-track: rgb(255 255 255 / 0.62);
   --c-hand-line: #C99A80;
 
   --s-soft: 0 1px 2px rgb(120 90 80 / 0.04), 0 12px 32px rgb(120 90 80 / 0.07);
@@ -144,6 +150,11 @@ input, select, textarea {
   --c-skin: #C9A797;
   --c-skin-deep: #B38D7C;
   --c-hand: #BF9A86;
+
+  --c-dial: #241D29;
+  --c-dial-hi: #3A2E3F;
+  --c-dial-line: rgb(255 220 230 / 0.05);
+  --c-dial-track: rgb(255 255 255 / 0.06);
   --c-hand-line: #8E6E5E;
 
   --s-soft: 0 0 0 1px rgb(255 255 255 / 0.02);
@@ -322,3 +333,11 @@ input, select, textarea {
 }
 .soothe-ripple { transform-box: fill-box; transform-origin: center; animation: soothe-ripple 1.6s ease-out infinite; }
 @media (prefers-reduced-motion: reduce) { .soothe-ripple { animation: none; } }
+
+/* Glints on the diamonds of the history watch dial */
+@keyframes gem-glint {
+  0%, 70%, 100% { opacity: 0; transform: scale(0.4); }
+  80% { opacity: 1; transform: scale(1); }
+}
+.gem-glint { transform-box: fill-box; transform-origin: center; animation: gem-glint 4.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .gem-glint { animation: none; opacity: 0; } }
