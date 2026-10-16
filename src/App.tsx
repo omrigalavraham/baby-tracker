@@ -41,6 +41,7 @@ import { WeightModal } from './components/WeightModal';
 import { BabyProfileModal } from './components/BabyProfileModal';
 import { SyncSettingsModal } from './components/SyncSettingsModal';
 import { ExportDataModal } from './components/ExportDataModal';
+import { SootheSheet } from './components/SootheSheet';
 import { SplashScreen } from './components/SplashScreen';
 import { LoggedToast, ToastData } from './components/home/LoggedToast';
 import { haptic } from './components/ui';
@@ -108,6 +109,7 @@ export function App() {
   // Modals
   const [feedingModalOpen, setFeedingModalOpen] = useState(false);
   const [diaperModalOpen, setDiaperModalOpen] = useState(false);
+  const [sootheOpen, setSootheOpen] = useState(false);
   const [sleepModalOpen, setSleepModalOpen] = useState(false);
   const [weightModalOpen, setWeightModalOpen] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
@@ -591,6 +593,7 @@ export function App() {
                 onOpenDiaper={() => setDiaperModalOpen(true)}
                 onOpenSleep={() => setSleepModalOpen(true)}
                 onOpenWeight={() => setWeightModalOpen(true)}
+                onOpenSoothe={() => setSootheOpen(true)}
               />
             </div>
           </div>
@@ -664,6 +667,8 @@ export function App() {
         canInstall={!!deferredPrompt}
         onInstallApp={handleInstallApp}
       />
+
+      <SootheSheet open={sootheOpen} onClose={() => setSootheOpen(false)} />
 
       <FeedingModal
         isOpen={feedingModalOpen}

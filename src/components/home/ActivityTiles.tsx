@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Droplet, Milk, Moon, Scale } from 'lucide-react';
+import { ChevronLeft, Droplet, HeartHandshake, Milk, Moon, Scale } from 'lucide-react';
 import { BabyEvent, BabyProfile } from '../../types';
 import { formatTimeAgo } from '../../lib/babyUtils';
 import { SectionTitle, TONE, Tone, cx } from '../ui';
@@ -14,6 +14,7 @@ interface ActivityTilesProps {
   onOpenDiaper: () => void;
   onOpenSleep: () => void;
   onOpenWeight: () => void;
+  onOpenSoothe: () => void;
 }
 
 // Glow color for the 'just logged' pulse, from the tone token
@@ -60,6 +61,7 @@ export const ActivityTiles: React.FC<ActivityTilesProps> = ({
   onOpenDiaper,
   onOpenSleep,
   onOpenWeight,
+  onOpenSoothe,
 }) => {
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -123,6 +125,19 @@ export const ActivityTiles: React.FC<ActivityTilesProps> = ({
           );
         })}
       </div>
+      <button
+        onClick={onOpenSoothe}
+        className="rounded-[28px] p-4 flex items-center gap-3 text-right text-ink bg-surface shadow-soft transition-transform duration-200 ease-out active:scale-[0.98]"
+      >
+        <span aria-hidden="true" className="w-[38px] h-[38px] rounded-full bg-sleep-soft text-sleep flex items-center justify-center shrink-0 [&_svg]:w-5 [&_svg]:h-5">
+          <HeartHandshake strokeWidth={1.6} />
+        </span>
+        <span className="flex-1 min-w-0 flex flex-col">
+          <span className="text-base font-medium">הרגעה</span>
+          <span className="text-[13px] text-sleep-ink truncate">תרגילים לכאבי בטן וגזים</span>
+        </span>
+        <ChevronLeft className="w-5 h-5 text-faint" />
+      </button>
     </section>
   );
 };

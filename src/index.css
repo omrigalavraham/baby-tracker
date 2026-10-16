@@ -77,6 +77,7 @@
   --c-milk-deep: #F2DFC0;
   --c-glass: rgb(255 255 255 / 0.7);
   --c-skin: #F4D7C6;
+  --c-skin-deep: #E8BFA9;
 
   --s-soft: 0 1px 2px rgb(120 90 80 / 0.04), 0 12px 32px rgb(120 90 80 / 0.07);
   --s-float: 0 12px 32px rgb(120 90 80 / 0.12);
@@ -139,6 +140,7 @@ input, select, textarea {
   --c-milk-deep: #BFAE90;
   --c-glass: rgb(255 255 255 / 0.06);
   --c-skin: #C9A797;
+  --c-skin-deep: #B38D7C;
 
   --s-soft: 0 0 0 1px rgb(255 255 255 / 0.02);
   --s-float: 0 12px 32px rgb(0 0 0 / 0.35);
@@ -308,3 +310,11 @@ input, select, textarea {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Fingertip ripples in the soothing exercises */
+@keyframes soothe-ripple {
+  0% { transform: scale(0.8); opacity: 0.7; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+.soothe-ripple { transform-box: fill-box; transform-origin: center; animation: soothe-ripple 1.6s ease-out infinite; }
+@media (prefers-reduced-motion: reduce) { .soothe-ripple { animation: none; } }
