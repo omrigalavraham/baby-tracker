@@ -6,8 +6,8 @@ import { TONE, Tone, cx } from '../ui';
 import { Category, shows } from './TypeFilter';
 
 /*
- * One day on a 24h axis, in three lanes: sleep as bars, feedings and diapers as dots.
- * RTL: midnight on the right, the day runs to the left. Tap a dot or bar for its details.
+ * One day as a 24h clock with a ring per type (sleep arcs, feeding and diaper dots),
+ * midnight at the top. The week view uses thin 24h strips instead. Tap a mark for details.
  */
 
 const DAY_MS = 86400000;
@@ -138,34 +138,133 @@ export const DayLanes: React.FC<{ events: BabyEvent[]; from: number; filters: Ca
     return <div className="flex flex-col gap-1">{lanes.map(l => <React.Fragment key={l.id}>{track(l)}</React.Fragment>)}</div>;
   }
 
-  return (
-    <div className="flex flex-col gap-2.5">
-      {lanes.map(l => (
-        <div key={l.id} className="flex items-center gap-2.5">
-          <span
-            aria-hidden="true"
-            className={cx('w-8 h-8 rounded-full flex items-center justify-center shrink-0 [&_svg]:w-4 [&_svg]:h-4', TONE[l.tone].soft, TONE[l.tone].icon)}
-          >
-            {l.icon}
-          </span>
-          {track(l)}
-        </div>
-      ))}
+  // ---- Full size: a 24h clock, one ring per type (outermost first), midnight at the top ----
+  const C = 160;
+  const RADII = [122, 95, 68];
+  const angle = (t: number) => ((t - from) / DAY_MS) * Math.PI * 2;
+  const at = (r: number, a: number) => ({ x: C + r * Math.sin(a), y: C - r * Math.cos(a) });
+  const arc = (r: number, a1: number, a2: number) => {
+    const p1 = at(r, a1);
+    const p2 = at(r, a2);
+    return `M${p1.x} ${p1.y} A${r} ${r} 0 ${a2 - a1 > Math.PI ? 1 : 0} 1 ${p2.x} ${p2.y}`;
+  };
+  const nowA = now > from && now < to ? angle(now) : null;
+  const pick = (id: string) => setSelected(s => (s === id ? null : id));
 
-      <div className="flex justify-between ps-[42px] text-[12px] text-muted tabular-nums" aria-hidden="true">
-        {HOURS.map(h => (
-          <span key={h}>{String(h).padStart(2, '0')}:00</span>
-        ))}
+  return (
+    <div className="flex flex-col items-center gap-3">
+      <div className="relative w-full max-w-[320px] aspect-square">
+        <svg viewBox="0 0 320 320" className="block w-full h-full" role="img" aria-label="שעון של 24 שעות: שינה, האכלות וחיתולים">
+          {/* hour ticks and labels */}
+          {Array.from({ length: 24 }, (_, h) => {
+            const a = (h / 24) * Math.PI * 2;
+            const major = h % 6 === 0;
+            const p1 = at(major ? 136 : 138, a);
+            const p2 = at(142, a);
+            return <line key={h} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="var(--c-faint)" strokeWidth={major ? 2 : 1} strokeLinecap="round" />;
+          })}
+          {HOURS.slice(0, 4).map(h => {
+            const p = at(152, (h / 24) * Math.PI * 2);
+            return (
+              <text key={h} x={p.x} y={p.y} textAnchor="middle" dominantBaseline="central" fontSize="11" fill="var(--c-muted)">
+                {String(h).padStart(2, '0')}
+              </text>
+            );
+          })}
+
+          {lanes.map((lane, i) => {
+            const r = RADII[i];
+            const items = dayEvents.filter(e => e.type === lane.id);
+            return (
+              <g key={lane.id}>
+                <circle cx={C} cy={C} r={r} fill="none" stroke="var(--c-sunken)" strokeWidth="20" />
+                {items.map(e => {
+                  const s = new Date(e.started_at).getTime();
+                  const sel = e.id === selected;
+                  const label = `${formatTime(e.started_at)} ${shortText(e)}`;
+                  if (lane.id === 'sleep') {
+                    const a1 = angle(Math.max(s, from));
+                    const a2 = Math.max(a1 + 0.02, angle(Math.min(sleepEnd(e), to)));
+                    return (
+                      <path
+                        key={e.id}
+                        d={arc(r, a1, a2)}
+                        fill="none"
+                        stroke="var(--c-sleep)"
+                        strokeWidth={sel ? 20 : 16}
+                        strokeLinecap="round"
+                        opacity={selected && !sel ? 0.45 : 1}
+                        className={cx('cursor-pointer transition-[stroke-width,opacity]', e.details?.isOngoing && 'animate-soft-pulse')}
+                        role="button"
+                        aria-label={label}
+                        onClick={() => pick(e.id)}
+                      />
+                    );
+                  }
+                  const p = at(r, angle(s));
+                  const hollow = lane.id === 'diaper' && e.details?.diaperType === 'pee';
+                  const color = lane.id === 'feeding' ? 'var(--c-feed)' : 'var(--c-diaper)';
+                  return (
+                    <g key={e.id} role="button" aria-label={label} className="cursor-pointer" onClick={() => pick(e.id)} opacity={selected && !sel ? 0.45 : 1}>
+                      <circle cx={p.x} cy={p.y} r="15" fill="transparent" />
+                      <circle
+                        cx={p.x}
+                        cy={p.y}
+                        r={sel ? 9 : 7}
+                        fill={hollow ? 'var(--c-surface)' : color}
+                        stroke={hollow ? color : 'var(--c-surface)'}
+                        strokeWidth={hollow ? 3 : 2}
+                        className="transition-[r]"
+                      />
+                    </g>
+                  );
+                })}
+              </g>
+            );
+          })}
+
+          {/* the clock hand at the current time */}
+          {nowA !== null && (
+            <g pointerEvents="none">
+              <line {...(() => { const a = at(52, nowA); const b = at(140, nowA); return { x1: a.x, y1: a.y, x2: b.x, y2: b.y }; })()} stroke="var(--c-ink)" strokeOpacity=".3" strokeWidth="2" strokeLinecap="round" />
+              <circle {...(() => { const b = at(140, nowA); return { cx: b.x, cy: b.y }; })()} r="3.5" fill="var(--c-ink)" fillOpacity=".45" />
+            </g>
+          )}
+        </svg>
+
+        {/* centre: what was tapped, or the time now */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="w-[34%] flex flex-col items-center text-center gap-0.5">
+            {picked ? (
+              <>
+                <span className="text-[20px] font-medium text-ink tabular-nums leading-tight">{formatTime(picked.started_at)}</span>
+                <span className="text-[12px] text-muted leading-snug">{shortText(picked)}</span>
+              </>
+            ) : nowA !== null ? (
+              <>
+                <span className="text-[22px] font-medium text-ink tabular-nums leading-tight">{formatTime(new Date(now).toISOString())}</span>
+                <span className="text-[12px] text-muted leading-snug">הקישו על נקודה לפרטים</span>
+              </>
+            ) : (
+              <span className="text-[12px] text-muted leading-snug">הקישו על נקודה לפרטים</span>
+            )}
+          </div>
+        </div>
       </div>
 
-      <div className="min-h-[40px] rounded-2xl bg-sunken px-3.5 py-2.5 text-[14px] flex items-center gap-2">
-        {picked ? (
-          <>
-            <span className="tabular-nums text-muted">{formatTime(picked.started_at)}</span>
-            <span className="text-ink">{shortText(picked)}</span>
-          </>
-        ) : (
-          <span className="text-muted">הקישו על נקודה או פס כדי לראות מה היה</span>
+      {/* which ring is which, outermost first */}
+      <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-[13px] text-muted">
+        {lanes.map(l => (
+          <span key={l.id} className="flex items-center gap-1.5">
+            <span className={cx('w-2.5 h-2.5 rounded-full', TONE[l.tone].solid)} />
+            {l.label}
+          </span>
+        ))}
+        {lanes.some(l => l.id === 'diaper') && (
+          <span className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full border-2 border-diaper" />
+            רק פיפי
+          </span>
         )}
       </div>
     </div>
