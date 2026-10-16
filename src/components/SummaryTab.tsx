@@ -2,10 +2,12 @@ import React, { useState } from 'react';
 import { BabyEvent, BabyProfile } from '../types';
 import { computeStats, DayStats } from '../lib/analyticsUtils';
 import { Card, Segmented, TONE, Tone, cx } from './ui';
+import { DayLanes } from './history/DayLanes';
+import { Category } from './history/TypeFilter';
 
 /*
  * Summary card of the History tab: gentle headline, three pastel stat tiles,
- * and a 24h sleep strip (day views) or a calm per-day list (week view).
+ * and a 24h chart of sleep, feedings and diapers (day views) or one row per day (week view).
  */
 
 export type HistoryPeriod = 'today' | 'yesterday' | 'week';
@@ -43,75 +45,11 @@ export function filterEventsForPeriod(events: BabyEvent[], period: HistoryPeriod
   return eventsInRange(events, from, to);
 }
 
-/** Sleep intervals clipped to [from, to). Ongoing sleep runs until now. */
-function sleepIntervals(events: BabyEvent[], from: number, to: number): { start: number; end: number; id: string }[] {
-  return events
-    .filter(e => e.type === 'sleep')
-    .map(e => {
-      const s = new Date(e.started_at).getTime();
-      const end = e.details?.isOngoing
-        ? Date.now()
-        : e.ended_at
-        ? new Date(e.ended_at).getTime()
-        : s + (e.details?.durationMinutes || 0) * 60000;
-      return { id: e.id, start: Math.max(s, from), end: Math.min(end, to) };
-    })
-    .filter(i => i.end > i.start);
-}
-
 export function formatHours(minutes: number): string {
   const h = minutes / 60;
   if (h === 0) return '0';
   return h >= 10 ? String(Math.round(h)) : String(Number(h.toFixed(1)));
 }
-
-const SleepStrip: React.FC<{ events: BabyEvent[]; from: number; size?: 'md' | 'sm'; showLabels?: boolean }> = ({
-  events,
-  from,
-  size = 'md',
-  showLabels = true,
-}) => {
-  const to = from + DAY_MS;
-  const segments = sleepIntervals(events, from, to);
-  const now = Date.now();
-  const showNow = now > from && now < to;
-  return (
-    <div>
-      <div
-        className={cx('relative rounded-full bg-sunken overflow-hidden', size === 'md' ? 'h-3' : 'h-2')}
-        role="img"
-        aria-label="שינה לאורך היממה"
-      >
-        {segments.map(s => (
-          <span
-            key={s.id}
-            className="absolute top-0 bottom-0 rounded-full bg-sleep"
-            style={{
-              right: `${((s.start - from) / DAY_MS) * 100}%`,
-              width: `max(4px, ${((s.end - s.start) / DAY_MS) * 100}%)`,
-            }}
-          />
-        ))}
-        {showNow && (
-          <span
-            className="absolute top-0 bottom-0 w-[2px] bg-faint"
-            style={{ right: `${((now - from) / DAY_MS) * 100}%` }}
-            aria-hidden="true"
-          />
-        )}
-      </div>
-      {showLabels && (
-        <div className="flex justify-between mt-2 text-[13px] text-muted tabular-nums" aria-hidden="true">
-          <span>00:00</span>
-          <span>06:00</span>
-          <span>12:00</span>
-          <span>18:00</span>
-          <span>24:00</span>
-        </div>
-      )}
-    </div>
-  );
-};
 
 const StatTile: React.FC<{ tone: Tone; value: React.ReactNode; label: string; hint?: string }> = ({ tone, value, label, hint }) => (
   <div className={cx('rounded-[24px] px-4 py-4 flex flex-col gap-0.5', TONE[tone].soft)}>
@@ -136,7 +74,7 @@ function headline(period: HistoryPeriod, count: number, stats: DayStats, days: n
   return 'סיכום השבוע';
 }
 
-const WeekDays: React.FC<{ events: BabyEvent[] }> = ({ events }) => {
+const WeekDays: React.FC<{ events: BabyEvent[]; filters: Category[] }> = ({ events, filters }) => {
   const today = startOfDay();
   const days = Array.from({ length: 7 }, (_, i) => today - i * DAY_MS);
   return (
@@ -172,7 +110,7 @@ const WeekDays: React.FC<{ events: BabyEvent[] }> = ({ events }) => {
                 </span>
               </span>
             </div>
-            <SleepStrip events={events} from={dayStart} size="sm" showLabels={false} />
+            <DayLanes events={events} from={dayStart} filters={filters} compact />
           </li>
         );
       })}
@@ -181,7 +119,7 @@ const WeekDays: React.FC<{ events: BabyEvent[] }> = ({ events }) => {
 };
 
 /** The main summary card used by HistoryTab. */
-export const SummaryCard: React.FC<{ events: BabyEvent[]; period: HistoryPeriod }> = ({ events, period }) => {
+export const SummaryCard: React.FC<{ events: BabyEvent[]; period: HistoryPeriod; filters?: Category[] }> = ({ events, period, filters = [] }) => {
   const filtered = filterEventsForPeriod(events, period);
   const stats = computeStats(filtered);
   const days = period === 'week' ? 7 : 1;
@@ -214,7 +152,7 @@ export const SummaryCard: React.FC<{ events: BabyEvent[]; period: HistoryPeriod 
         <StatTile tone="diaper" value={stats.totalDiapers} label="חיתולים" hint={isWeek ? avg(stats.totalDiapers) : undefined} />
       </div>
 
-      {isWeek ? <WeekDays events={events} /> : <SleepStrip events={events} from={from} />}
+      {isWeek ? <WeekDays events={events} filters={filters} /> : <DayLanes key={from} events={events} from={from} filters={filters} />}
     </Card>
   );
 };

@@ -4,6 +4,7 @@ import { Segmented } from './ui';
 import { SummaryCard, HistoryPeriod, PERIOD_OPTIONS, filterEventsForPeriod } from './SummaryTab';
 import { InsightsCard } from './InsightsTab';
 import { TimelineList } from './TimelineList';
+import { Category, TypeFilter } from './history/TypeFilter';
 
 interface HistoryTabProps {
   events: BabyEvent[];
@@ -27,6 +28,7 @@ const EMPTY_TEXT: Record<HistoryPeriod, string> = {
 
 export const HistoryTab: React.FC<HistoryTabProps> = ({ events, profile, onDeleteEvent, onOpenFeeding, onOpenSleep }) => {
   const [period, setPeriod] = useState<HistoryPeriod>('today');
+  const [filters, setFilters] = useState<Category[]>([]);
   const todayLabel = new Date().toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' });
   const periodEvents = filterEventsForPeriod(events, period);
 
@@ -38,9 +40,10 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({ events, profile, onDelet
           <h1 className="text-[26px] font-medium tracking-tight text-ink">היסטוריה</h1>
         </header>
         <Segmented label="טווח זמן" options={PERIOD_OPTIONS} value={period} onChange={setPeriod} />
+        <TypeFilter value={filters} onChange={setFilters} />
       </div>
 
-      <SummaryCard events={events} period={period} />
+      <SummaryCard events={events} period={period} filters={filters} />
 
       <InsightsCard
         events={events}
@@ -53,6 +56,8 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({ events, profile, onDelet
       <TimelineList
         events={periodEvents}
         onDeleteEvent={onDeleteEvent}
+        filters={filters}
+        onClearFilters={() => setFilters([])}
         title={TIMELINE_TITLE[period]}
         emptyText={EMPTY_TEXT[period]}
       />
